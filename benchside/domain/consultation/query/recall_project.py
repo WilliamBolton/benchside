@@ -9,6 +9,7 @@ from pydantic import Field
 from benchside.domain.consultation.model.value import Decision, Target
 from benchside.domain.consultation.service.consultation import ConsultationService
 from benchside.domain.shared.command import Result
+from benchside.domain.shared.error import NotFoundError
 from benchside.domain.shared.model.ids import ProjectId
 from benchside.domain.shared.query import Query, QueryHandler
 
@@ -30,16 +31,19 @@ class RecallProjectHandler(QueryHandler[RecallProject, ProjectRecall]):
     consultation_service: ConsultationService
 
     def run(self, query: RecallProject) -> ProjectRecall:
-        project = self.consultation_service.get_project(query.project_id)
+        try:
+            project = self.consultation_service.get_project(query.project_id)
+        except NotFoundError:
+            # A fresh project has no journal yet. That is an empty recall,
+            # not an error -- SessionStart injection must survive it.
+            return ProjectRecall(project_id=query.project_id, title=query.project_id.root)
         latest = self.consultation_service.latest_for_project(query.project_id)
         current = project.current_hypothesis
         return ProjectRecall(
             project_id=project.id,
             title=project.title,
             current_hypothesis=current.statement if current else None,
-            open_questions=[
-                describe_target(c.target) for c in project.critiques if c.is_open
-            ],
+            open_questions=[describe_target(c.target) for c in project.critiques if c.is_open],
             recent_decisions=project.decisions[-5:],
             last_sitting_state=latest.state.kind if latest else None,
         )
