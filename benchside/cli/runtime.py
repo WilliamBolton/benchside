@@ -113,8 +113,19 @@ def _git_remote_slug(cwd: Path) -> str | None:
 # --- Sitting pointers (per session; parallel sessions never fight) ---
 
 
-def session_name() -> str:
-    return os.environ.get("CLAUDE_SESSION_ID") or "local"
+def session_name(paths: Paths | None = None, project_id: ProjectId | None = None) -> str:
+    """The session this bench invocation belongs to. Env wins; else the id
+    the SessionStart hook registered for this project; else 'local'."""
+    env = os.environ.get("CLAUDE_SESSION_ID")
+    if env:
+        return env
+    if paths is not None and project_id is not None:
+        from benchside.infrastructure.session_context import current_session
+
+        registered = current_session(paths, project_id)
+        if registered:
+            return registered
+    return "local"
 
 
 def pointer_dir(paths: Paths) -> Path:
@@ -124,13 +135,14 @@ def pointer_dir(paths: Paths) -> Path:
 def write_pointer(paths: Paths, *, sitting_id: str, project_id: ProjectId, persona_id: str) -> None:
     directory = pointer_dir(paths)
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{session_name()}.json").write_text(
+    session = session_name(paths, project_id)
+    (directory / f"{session}.json").write_text(
         json.dumps(
             {
                 "sitting_id": sitting_id,
                 "project_id": project_id.root,
                 "persona_id": persona_id,
-                "session": session_name(),
+                "session": session,
                 "opened_at": datetime.now(UTC).isoformat(),
             }
         ),
@@ -180,8 +192,9 @@ def read_pointer(paths: Paths, project_id: ProjectId | None = None) -> dict | No
         return {"sitting_id": override, "project_id": None}
     if project_id is not None:
         records = [r for r in records if r.get("project_id") == project_id.root]
+    mine = session_name(paths, project_id)
     for record in records:
-        if record.get("session") == session_name():
+        if record.get("session") == mine:
             return record
     if len(records) == 1:
         return records[0]

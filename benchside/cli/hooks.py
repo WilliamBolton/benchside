@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from benchside.cli import runtime
+from benchside.infrastructure.session_context import clear_session, register_session
 
 
 def cmd_hook(args) -> int:
@@ -44,6 +45,9 @@ def _session_start(payload: dict) -> None:
         return  # not a benchside project; <10ms bail
     paths = runtime.current_paths()
     project_id = runtime.resolve_project(cwd=project_dir)
+    session_id = payload.get("session_id")
+    if session_id:
+        register_session(paths, project_id, session_id)
 
     lines = [f"benchside: project '{project_id.root}'."]
     recall = _recall_lines(project_id)
@@ -102,6 +106,9 @@ def _session_end(payload: dict) -> None:
 
     if project_root is None:
         project_root = runtime.resolve_project(cwd=project_dir).root
+    from benchside.domain.shared.model.ids import ProjectId
+
+    clear_session(paths, ProjectId(project_root), session_id)
 
     transcript = payload.get("transcript_path") or ""
     if transcript and Path(transcript).is_file():

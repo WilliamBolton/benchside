@@ -58,9 +58,7 @@ class RichRenderer:
         self._console.print(Text(f"{self._glyphs.warn} {text}", style="yellow"))
 
     def error(self, headline: str, *, cause: str | None, hint: str | None) -> None:
-        self._console.print(
-            Text.assemble((f"{self._glyphs.cross} ", "red"), (headline, "bold"))
-        )
+        self._console.print(Text.assemble((f"{self._glyphs.cross} ", "red"), (headline, "bold")))
         if cause:
             self._console.print(Text(f"  {cause}", style="dim"))
         if hint:

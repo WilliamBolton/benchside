@@ -91,6 +91,13 @@ Two consequences worth naming:
   its `ConsultationOpened` event. Reading the persona YAML live at close would
   mean editing a persona retroactively changes whether last month's sitting
   can legally close. The journal must be self-contained.
+- **Every entry names its conversation.** Journal envelopes carry the Claude
+  session id that produced them (`{"type", "session", "data"}`). Claude Code
+  doesn't export the session id to Bash subprocesses, so the SessionStart
+  hook registers it per project and `bench` stamps from there. The same id
+  names the archived transcript and Claude Code's own record under
+  `~/.claude/projects/`, so any journal entry joins back to the full
+  conversation that produced it.
 - **Ids are opaque and CLI-generated.** The model never invents `h1` or `k3`;
   every `bench` command prints the id it created. Deterministic ids collided
   and let replayed duplicates corrupt folds; uuids ended that class of bug.
