@@ -19,6 +19,7 @@ from benchside.domain.shared.error import StorageUnavailableError
 from benchside.domain.shared.event import Event
 from benchside.domain.shared.model.ids import ProjectId
 from benchside.infrastructure.journal.registry import ensure_events_registered
+from benchside.infrastructure.session_context import current_session
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,11 @@ class JsonlJournal:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             line = json.dumps(
-                {"type": type(event).__name__, "data": event.model_dump(mode="json")},
+                {
+                    "type": type(event).__name__,
+                    "session": current_session(self._paths, project_id),
+                    "data": event.model_dump(mode="json"),
+                },
                 ensure_ascii=False,
             )
             with path.open("a", encoding="utf-8") as handle:
@@ -46,6 +51,25 @@ class JsonlJournal:
         if not path.exists():
             return []
         return list(self._parse(path))
+
+    def read_envelopes(self, project_id: ProjectId) -> Iterable[dict]:
+        """Raw journal lines as dicts — type, session, data. For views and
+        analysis that need the session linkage the domain Event doesn't carry."""
+        path = self._paths.journal_file(project_id.root)
+        if not path.exists():
+            return []
+        envelopes = []
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                record = json.loads(raw)
+                record.setdefault("session", None)
+                envelopes.append(record)
+            except json.JSONDecodeError:
+                continue
+        return envelopes
 
     def projects(self) -> Iterable[ProjectId]:
         root = self._paths.journal_dir

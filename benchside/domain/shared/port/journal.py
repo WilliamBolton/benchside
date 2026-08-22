@@ -27,4 +27,10 @@ class Journal(Port, Protocol):
     def read(self, project_id: ProjectId) -> Iterable[Event]: ...
 
     @abstractmethod
+    def read_envelopes(self, project_id: ProjectId) -> Iterable[dict]:
+        """Raw records: type, session (the Claude conversation id that
+        produced the event, when known), and data."""
+        ...
+
+    @abstractmethod
     def projects(self) -> Iterable[ProjectId]: ...
