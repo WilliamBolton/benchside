@@ -212,6 +212,8 @@ class ReportingService(Service):
                     records=RecordCounts(**value["records"]),
                 )
                 for key, value in sorted(groups.items())
+                if any(value[field] for field in ("started", "concluded", "abandoned"))
+                or any(value["records"].values())
             ],
         )
 

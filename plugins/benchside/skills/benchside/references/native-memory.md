@@ -77,6 +77,16 @@ Always inspect the actual tools available in this account; never invent APIs.
   Never use `targetRevisionId` to merge opaque snapshots or a blind Drive file
   replacement. This verifies this connector's guarded save/read/restore path;
   another app's Google connector needs the same capability check.
+  Claude's separate **Google Docs** connector passed cross-app continuation on
+  27 October: `read_doc` returned complete content and the revision;
+  `update_doc` accepted `documents.batchUpdate` with
+  `writeControl.requiredRevisionId`. Its exact-old-state replacement and complete
+  readback passed `native.confirm`. This is separate from Drive-only search/read
+  access and may require broader account permission. Inspect the current tools
+  and obtain the user's approval for any new scope. If the connector requires a
+  literal payload, verify its bytes/checksum before sending and after readback.
+  Its Docs read did not expose sharing metadata; verify privacy through an
+  authorized metadata tool or the sharing UI before selecting the document.
 
 - **Other connected stores:** use the installed connector's observed complete-read,
   create, conditional-update and readback tools. Store the exact Markdown/JSON
@@ -237,13 +247,19 @@ to make an older package accept it.
 
 `native.inspect` and runtime responses include capacity information. Ordinary
 writes leave 16 KiB of document space and 64 KiB of decoded state for privacy
-controls. Consent withdrawal can use that reserve. In a legacy notebook already
+controls. A genuine enabled-to-disabled privacy change can use that reserve;
+repeated opt-outs and unrelated profile edits cannot. In a legacy notebook already
 at the hard limit, withdrawal first compacts cached responses; if necessary it
 checkpoints the consent ledger to its effective active permissions while keeping
 all scientific records, submitted receipts and operation identities. A response
 with `control_history_compacted:true` indicates that consent-history checkpoint;
 retain the previous notebook version for its historical consent audit. Old
 approvals do not become valid again when a new grant is issued.
+
+Analysis withdrawal and source-scope changes also compact prior replay responses
+to remove cached source/session references. Operation IDs and request hashes
+remain, so replay protection is preserved. Earlier host versions or backups may
+still contain the old responses.
 
 Finite notebooks still need eventual archival. If irreducible legacy data fills
 the hard limit even after compaction, a withdrawal can fail to save. Report that

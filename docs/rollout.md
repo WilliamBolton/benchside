@@ -13,7 +13,7 @@ save/readback in both apps; the 0.1.2 fixes require a further installed update c
 Coverage includes native
 memory cases covering all seven roles, project isolation, consent/draft recovery,
 ambiguous saves, operation replay and invalid state. The companion
-collector passes its type check and 38 Worker tests. The extracted app package
+collector passes its type check and 43 Worker tests. The extracted app package
 also saves, resumes and concludes all seven roles across fresh processes using
 both local files and portable native-document snapshots. All three archive formats
 (standalone skill, Claude plugin and portable/OpenAI plugin) pass the extracted

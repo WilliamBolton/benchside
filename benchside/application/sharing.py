@@ -210,16 +210,37 @@ class SharingFlow:
                     ),
                 ),
             )
+        existing = [
+            SubmissionDraft.model_validate_json(path.read_text())
+            for path in (self.paths.home / "sharing/drafts").glob("*.json")
+        ]
         drafts = []
         for preview in previews:
-            draft = SubmissionDraft(
-                id=uuid.uuid4().hex,
-                channel=channel,
-                preview=preview,
-                demographics_revision=self.profile().revision if channel == "usage" else None,
+            profile_revision = self.profile().revision if channel == "usage" else None
+            draft = next(
+                (
+                    old for old in existing
+                    if old.channel == channel and old.preview == preview
+                    and old.demographics_revision == profile_revision
+                ),
+                None,
             )
+            if draft is None:
+                draft = SubmissionDraft(
+                    id=uuid.uuid4().hex,
+                    channel=channel,
+                    preview=preview,
+                    demographics_revision=profile_revision,
+                )
             atomic_json(self._draft_path(draft.id), draft.model_dump(mode="json"))
             drafts.append(draft)
+        # One review flow per channel. Save the whole replacement batch first;
+        # keep other channels, original observations/feedback and receipt ledgers.
+        # Identical previews reuse their ID so failed-send retries keep exact bytes.
+        retained = {draft.id for draft in drafts}
+        for old in existing:
+            if old.channel == channel and old.id not in retained:
+                self._draft_path(old.id).unlink()
         return drafts
 
     def _usage(self, week):
@@ -264,7 +285,10 @@ class SharingFlow:
     def load(self, identifier):
         path = self._draft_path(identifier)
         if not path.exists():
-            raise NotFoundError("Submission draft was not found; prepare a preview first")
+            raise NotFoundError(
+                "Submission draft was not found or was superseded by a newer preview; "
+                "prepare and review the current preview"
+            )
         return SubmissionDraft.model_validate_json(path.read_text())
 
     def send(self, identifier, approved_sha256):

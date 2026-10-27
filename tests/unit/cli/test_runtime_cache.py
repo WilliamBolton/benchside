@@ -2,6 +2,7 @@
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -111,6 +112,32 @@ def test_cached_code_changes_are_rejected(packaged_runtime, attack):
     # reject them before the link-type check. Both must stop cache reuse.
     with pytest.raises(RuntimeError, match="integrity|links|ownership or permissions"):
         entry.bootstrap()
+    assert len(calls) == 1
+
+
+def test_integrity_failure_identifies_cache_without_rewriting_it(
+    packaged_runtime, monkeypatch, capsys
+):
+    entry, temporary, identity, calls = packaged_runtime
+    entry.bootstrap()
+    directory = temporary / f"benchside-runtime-v2-{os.getuid()}" / identity
+    module = directory / "site/synthetic.py"
+    changed_code = "raise RuntimeError('must never execute')\n"
+    module.write_text(changed_code)
+    receipt = directory / ".ready.json"
+    original_receipt = receipt.read_bytes()
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"action":"roles"}'))
+
+    assert entry.main() == 1
+
+    response = json.loads(capsys.readouterr().out)
+    assert response["code"] == "setup_failed"
+    assert str(directory) in response["error"]
+    assert "verify ownership" in response["error"]
+    assert "move aside only this generated cache directory" in response["error"]
+    assert "rebuild the runtime offline" in response["error"]
+    assert module.read_text() == changed_code
+    assert receipt.read_bytes() == original_receipt
     assert len(calls) == 1
 
 

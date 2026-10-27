@@ -64,6 +64,25 @@ and supported by that particular account; no schedule is created by installation
 - Revoke any choice to stop future processing/sends. Scope changes and regranting
   consent invalidate pending drafts. Edited activity records invalidate prior
   previews. No review happens automatically, including in scheduled tasks.
+- Narrowing sources retires the current week's sample; older samples containing
+  removed sources are retired too. A retired week cannot be resumed or sampled
+  again, even after reselecting sources. The adapter gives the next eligible
+  Monday; select approved sources and continue in that later UTC week. Retirement
+  never changes a submitted batch's counts or draws replacement sessions.
+- Withdrawing analysis clears source selections, sampled conversation references,
+  private classifications and unsent activity drafts. It retains source-free
+  retired-week markers so re-enabling cannot redraw the same week, and private
+  hashes of previously selected host/session references to prevent later
+  resampling. Those hashes are never submitted, but their retention means this
+  is not erasure of every local trace. Submitted receipts and their exact backing
+  category payloads remain for audit/removal requests; pending surveys are
+  independent. Native replay responses are also compacted on analysis or scope
+  changes, preserving operation IDs and hashes without old source/session
+  references. Earlier host document versions or backups may retain older data.
+- Repeated previews prune superseded drafts that have no receipt. Current review
+  drafts and receipt-backed payloads remain. If those retained records fill the
+  state limit, preserve and archive them before preparing more submissions;
+  withdrawing consent remains available.
 - Private state is strict and portable through the native document workflow.
   Native size limits still apply. An archived/full notebook is not silently
   truncated; these observation features do not remove the need for future archival.

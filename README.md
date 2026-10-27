@@ -38,7 +38,9 @@ repository. Native memory uses a private notebook in ChatGPT Space (or compatibl
 Claude Docs), with readable journals per project. Guarded saves and readback
 protect the validated record; the execution sandbox is disposable. Both installed
 plugins passed synthetic native saves and fresh-chat restoration on 23 October.
-Shared Google storage across the apps remains a separate acceptance check.
+Shared Google storage passed a synthetic continuation on 27 October: Claude's
+installed 0.1.1 plugin resumed the project saved by ChatGPT through Google Docs.
+The rebuilt 0.1.2 review update still needs installed-app acceptance.
 See the [rollout checks](docs/rollout.md) before
 inviting researchers through a particular app route.
 

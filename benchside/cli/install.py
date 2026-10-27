@@ -149,6 +149,7 @@ def _retire_legacy_skills(target: Path) -> None:
 
     known = resolve_content_root() / "legacy-skill-digests.json"
     historical = json.loads(known.read_text()) if known.is_file() else {}
+    changed = []
     with tempfile.TemporaryDirectory(prefix="benchside-legacy-check-") as temporary:
         expected = Path(temporary)
         _compile_skills(expected)
@@ -165,11 +166,16 @@ def _retire_legacy_skills(target: Path) -> None:
                 hashlib.sha256(text.encode()).hexdigest() in historical.get(original.parent.name, [])
             ):
                 installed.write_text(_explicit_skill(text), encoding="utf-8")
+                changed.append(original.parent.name)
             elif not text.startswith("---\ndisable-model-invocation: true\n"):
                 print(
                     f"Preserved custom skill at {installed}; "
                     "review its invocation before using both routes."
                 )
+    if changed:
+        names = ", ".join(f"/{name}" for name in sorted(changed))
+        print(f"Updated legacy Benchside commands to explicit invocation only: {names}.")
+        print("Their saved research records remain in the existing CLI journal.")
 
 
 def _compile_skills(target_dir: Path, *, explicit: bool = False) -> None:

@@ -17,7 +17,7 @@ import zlib
 from pathlib import Path
 
 from benchside.application.app import READ_ACTIONS, App
-from benchside.application.sharing import ParticipationChoice, SubmissionDraft
+from benchside.application.sharing import ParticipationChoice, SharingFlow, SubmissionDraft
 from benchside.config import Paths
 from benchside.domain.export.model.metascience import MetaState
 from benchside.domain.export.model.reporting import ResearchProfile, UsagePayload
@@ -378,26 +378,67 @@ def _compact_operations(body, *, current=None, all_results=False):
             }
 
 
-def _withdrawal(command):
-    if command["action"] == "batch":
-        steps = command.get("steps", [])
-        return (
-            bool(steps)
-            and any(_withdrawal(step["request"]) for step in steps)
-            and all(
-                step["request"]["action"] in READ_ACTIONS or _withdrawal(step["request"])
-                for step in steps
-            )
-        )
+def _privacy_controls(app):
+    flow = SharingFlow(app.paths)
+    status = flow.status()
+    profile = flow.profile()
+    enabled = {f"sharing.{key}" for key in ("gaps", "feedback", "usage") if status[key]["enabled"]}
+    meta_path = app.paths.home / "metascience/state.json"
+    scopes = []
+    if meta_path.exists():
+        state = MetaState.model_validate_json(meta_path.read_text())
+        enabled.update(f"metascience.{key}" for key in state.grants)
+        scopes = state.scopes
+    if profile.include_in_usage:
+        enabled.add("profile.include_in_usage")
+    return {"enabled": enabled, "demographics": profile.demographics.model_dump(), "scopes": scopes}
+
+
+def _commands(command):
     return (
-        (
-            command["action"] in {"sharing.consent", "metascience.consent"}
-            and command.get("enabled") is False
-        )
-        or (command["action"] == "profile.set" and command.get("include_in_usage") is False)
-        or (
-            command["action"] == "participation.set"
-            and command.get("response") in {"declined", "deferred"}
+        [step["request"] for step in command["steps"]]
+        if command["action"] == "batch"
+        else [command]
+    )
+
+
+def _withdrawal(command, before, after):
+    """Reserve capacity for actual opt-outs, never repeated off/preference writes."""
+    for item in _commands(command):
+        action = item["action"]
+        if action in READ_ACTIONS:
+            continue
+        if action in {"sharing.consent", "metascience.consent"} and item.get("enabled") is False:
+            continue
+        if action == "participation.set" and item.get("response") in ("declined", "deferred"):
+            continue
+        if action == "profile.set" and item.get("include_in_usage") is False:
+            demographics = item.get("demographics")
+            if (
+                isinstance(demographics, dict)
+                and {
+                    "discipline": None,
+                    "career_stage": None,
+                    **demographics,
+                }
+                == before["demographics"]
+            ):
+                continue
+        # A batch may use the reserve only for literal opt-outs and reads.
+        # Unrelated profile changes and unresolved references use ordinary space.
+        return False
+    return bool(before["enabled"] - after["enabled"]) and not (after["enabled"] - before["enabled"])
+
+
+def _retired_analysis(command, before, after):
+    # Repeated analysis opt-outs also remove cached references left by older
+    # versions. Retain replay IDs/hashes, not withdrawn source/session details.
+    return (
+        before["scopes"] != after["scopes"]
+        or "metascience.analysis" in (before["enabled"] ^ after["enabled"])
+        or any(
+            item["action"] == "metascience.consent" and item.get("choice") == "analysis"
+            for item in _commands(command)
         )
     )
 
@@ -447,7 +488,10 @@ def _preflight_submission(body, snapshot, command):
             }
         )
     else:
-        state = MetaState.model_validate_json(body["files"].get("metascience/state.json", "{}"))
+        text = body["files"].get("metascience/state.json")
+        if text is None:
+            return  # Let the ordinary unknown-draft validation supply recovery guidance.
+        state = MetaState.model_validate_json(text)
         draft = state.drafts.get(command.get("draft_id"))
         if draft is None:
             return
@@ -637,6 +681,8 @@ def _execute_batch(app, body, steps):
 
 def run_native(request):
     """Host-neutral entry point used by the bundled app script."""
+    if not isinstance(request, dict) or not isinstance(request.get("action"), str):
+        _fail("Provide a native memory action")
     action = request["action"]
     if action == "native.create":
         snapshot = pack({"files": {}, "projects": {}, "operations": {}}, uuid.uuid4().hex, 0)
@@ -646,6 +692,8 @@ def run_native(request):
     expected = request.get("workspace_id")
     if not isinstance(expected, str) or not HEX.fullmatch(expected):
         _fail("Use the notebook workspace ID returned by native.create")
+    if request.get("document") is None:
+        _fail("Read and provide the complete saved native document before continuing")
     snapshot, body = unpack(request["document"], expected)
     if action == "native.confirm":
         if reference(snapshot) != request.get("expected"):
@@ -662,7 +710,9 @@ def run_native(request):
         }
 
     batch = action == "native.batch"
-    command = {"action": "batch", "steps": request.get("steps")} if batch else request["request"]
+    command = (
+        {"action": "batch", "steps": request.get("steps")} if batch else request.get("request")
+    )
     if not isinstance(command, dict) or not isinstance(command.get("action"), str):
         _fail("Provide an app request inside native.run")
     project = request.get("project_document")
@@ -684,10 +734,12 @@ def run_native(request):
         _restore(body["files"], home)
         app = App(Paths(home=home, repo_root=home))
         outcome = {"ok": True}
+        withdrawal = False
         if previous:
             result = previous["result"]
         else:
             try:
+                original_controls = _privacy_controls(app)
                 if command["action"] in {"sharing.send", "metascience.send"}:
                     _compact_operations(body)
                     _preflight_submission(body, pack(body, expected, snapshot["revision"]), command)
@@ -702,12 +754,18 @@ def run_native(request):
                     else command["action"] not in READ_ACTIONS
                 )
                 if mutates:
+                    current_controls = _privacy_controls(app)
+                    withdrawal = _withdrawal(command, original_controls, current_controls)
                     body["operations"][operation_id] = {
                         "request_sha256": request_hash,
                         "result": result,
                         "revision": snapshot["revision"] + 1,
                     }
-                    _compact_operations(body, current=operation_id)
+                    _compact_operations(
+                        body,
+                        current=operation_id,
+                        all_results=_retired_analysis(command, original_controls, current_controls),
+                    )
             except BenchsideError as error:
                 result = None
                 outcome = {"ok": False, "error": str(error), "code": error.code}
@@ -728,13 +786,13 @@ def run_native(request):
             try:
                 candidate = pack(body, expected, snapshot["revision"] + 1) if changed else snapshot
             except ValidationError as error:
-                if error.code != "native_capacity" or not outcome["ok"] or not _withdrawal(command):
+                if error.code != "native_capacity" or not outcome["ok"] or not withdrawal:
                     raise
                 _compact_operations(body, all_results=True)
                 _compact_control_history(body)
                 candidate = pack(body, expected, snapshot["revision"] + 1)
                 control_history_compacted = True
-            if changed and not _withdrawal(command):
+            if changed and not withdrawal:
                 _require_headroom(body, candidate)
         except ValidationError as error:
             if error.code != "native_capacity":
@@ -755,7 +813,7 @@ def run_native(request):
                 )
             else:
                 result = None
-                if _withdrawal(command):
+                if withdrawal:
                     outcome["error"] = (
                         "Consent withdrawal could not fit in this legacy notebook, even after "
                         "compacting replay responses and consent history. It has not been saved. "

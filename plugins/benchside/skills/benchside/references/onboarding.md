@@ -31,6 +31,15 @@ use `--agent generic --skills-dir <its observed skill directory>`. If it cannot
 automatically discover skills, tell the researcher to reference the installed
 `benchside/SKILL.md` in a new conversation. Do not claim automatic discovery until tested.
 
+When changing installation method or replacing a release, use the host's complete
+plugin update flow or stage the replacement in a clean directory. Do not unzip a
+packaged release over a source-installed skill: its retained `runtime/source.json`
+would still select the earlier source environment. Copying over an existing folder
+also retains files removed or renamed by the new release. Preserve custom files
+separately and replace only the managed installation after checking the new copy;
+do not delete unknown files. Keep private record storage in place and reopen the
+same project after the update.
+
 ## Ask where records should live
 
 Offer only locations the host can actually access, and explain which still need

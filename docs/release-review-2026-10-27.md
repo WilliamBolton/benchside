@@ -31,8 +31,10 @@ Three Codex review agents examined memory/consent, metascience/reporting and
 packaging/onboarding. A separate Claude Opus review read client commit `4992880`
 against base `eb9c039`; its environment blocked running PR code, so its findings
 were static analysis. Local executable regressions substantiate the fixes below.
-Claude could not fetch the private receiver source; do not count that as a
-completed receiver review.
+The browser reviewer could not fetch the private receiver source. A later
+read-only Claude Code review used the local receiver checkout at `8aad0f5`, and
+a separate Claude Code follow-up examined client `ca762ae`. Neither executed
+code. Proposed defects were checked against the implementation and test results.
 
 - Native memory bounds cached response bodies while retaining operation IDs and
   request hashes; submissions check capacity before networking, and ordinary
@@ -58,16 +60,32 @@ completed receiver review.
   newly added provenance fields or compacted replay entries. Keep the notebook;
   do not create a replacement or discard unfamiliar records.
 
+The follow-up led to narrower withdrawal-reserve rules, actionable malformed
+request errors, superseded-preview cleanup, removal of empty usage rows, safe
+cache-recovery guidance and reporting of migrated source commands. Analysis
+withdrawal removes unsubmitted source selections/classifications; changing sources
+retires an affected weekly sample rather than silently drawing another one.
+Submitted receipts and private no-resampling hashes remain, as documented.
+
+Receiver follow-up fixes duplicate receipts for restored objects lacking their
+original metadata, using R2's actual upload time. A shared non-ASCII fixture
+confirms the Python/TypeScript study digest contract, and shuffled receiver tests
+pass. The suggested Unicode mismatch and test-order dependency were not confirmed.
+The claimed Linux cache-install blocker was contradicted by actual Linux 3.11 and
+3.14 CI, including cold package execution. Public write access, an empty study
+catalog and separately gated staging deployment remain explicit design choices.
+
 ## Verification
 
-- All 296 Python tests passed on Python 3.11 and Python 3.14.
+- All 327 Python tests passed on Python 3.11 and Python 3.14.
 - Lint, all seven compiled-role checks, Codex/portable manifest, Claude manifest
   and shared skill validation passed.
 - All three rebuilt 0.1.2 archives passed extracted-runtime checks: all seven roles across
   fresh processes, native restore, batches, remembered choices, replay and
   rejection of a damaged dependency even with an existing cache.
-- All 38 receiver tests passed, including a Unicode boundary check matching the
-  Python client's existing UTF-16 feedback limit. Type checking passed.
+- All 43 receiver tests passed, including restored receipts, the shared Unicode
+  study digest and the feedback UTF-16 boundary. Shuffled execution and type
+  checking passed.
 - The local integration check passed all five channels: stored and duplicate
   receipts, a synthetic study invitation, three sampled activity records, rejected
   transcript content and consent withdrawal before networking. Production requests: 0.
@@ -75,10 +93,11 @@ completed receiver review.
   separate `-staging` EU buckets. It did not create those buckets or deploy a Worker.
 - The CI action tags were checked against their upstream GitHub repositories.
 - Previous GitHub CI passed for both Python versions, including all three archive checks,
-  on [client commit 4992880](https://github.com/WilliamBolton/benchside/actions/runs/40492728446).
+  on [client commit 894cc42](https://github.com/WilliamBolton/benchside/actions/runs/40506017287).
   This run is on the contributor fork; the upstream PR currently has no check run.
-  [Receiver CI](https://github.com/science-works/benchside-ingest/actions/runs/40492736532)
-  also passed for commit 8aad0f5. These historical runs do not certify later edits.
+  [Receiver CI](https://github.com/science-works/benchside-ingest/actions/runs/40509010527)
+  also passed for commit 6f18f2a, including the restored-object fix. Historical
+  client runs do not certify later edits.
 
 ## Installed-app Google storage check
 

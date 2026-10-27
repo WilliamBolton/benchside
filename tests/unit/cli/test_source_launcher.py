@@ -111,7 +111,9 @@ def test_claude_init_selects_one_default_recording_route(tmp_path, monkeypatch, 
         assert (skills / "benchside/runtime/source.json").is_file()
 
 
-def test_switching_to_shared_entry_preserves_journals_and_custom_skills(tmp_path, monkeypatch):
+def test_switching_to_shared_entry_preserves_journals_and_custom_skills(
+    tmp_path, monkeypatch, capsys
+):
     project = tmp_path / "research"
     project.mkdir()
     monkeypatch.chdir(project)
@@ -135,8 +137,17 @@ def test_switching_to_shared_entry_preserves_journals_and_custom_skills(tmp_path
     unrelated = {"matcher": "", "hooks": [{"type": "command", "command": "my-other-hook"}]}
     settings["hooks"]["SessionStart"].append(unrelated)
     settings_path.write_text(json.dumps(settings))
+    capsys.readouterr()
 
     assert main(["init", "--yes"]) == 0
+    output = capsys.readouterr().out
+    notice = next(
+        line for line in output.splitlines()
+        if line.startswith("Updated legacy Benchside commands to explicit invocation only:")
+    )
+    assert "/pi" in notice
+    assert "methods-clinic" not in notice
+    assert f"Preserved custom skill at {customized}" in output
 
     assert recognized.read_text() == original_generated.replace(
         "---\n", "---\ndisable-model-invocation: true\n", 1
@@ -148,3 +159,5 @@ def test_switching_to_shared_entry_preserves_journals_and_custom_skills(tmp_path
     remaining_hooks = json.loads(settings_path.read_text())["hooks"]
     assert remaining_hooks["SessionStart"] == [unrelated]
     assert remaining_hooks["SessionEnd"] == []
+    assert main(["init", "--yes"]) == 0
+    assert "Updated legacy Benchside commands" not in capsys.readouterr().out

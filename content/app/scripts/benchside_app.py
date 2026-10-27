@@ -177,7 +177,13 @@ def bootstrap():
                 or not receipt.get("files")
                 or receipt["files"] != cache_inventory(site)
             ):
-                raise RuntimeError("Runtime cache integrity check failed; rebuild this private cache")
+                raise RuntimeError(
+                    "Runtime cache integrity check failed. Have your agent verify ownership "
+                    f"and move aside only this generated cache directory: {directory}. "
+                    "Then rerun the installed skill to rebuild the runtime offline from its "
+                    "verified bundle. Keep the installed package and research-record storage "
+                    "in place; do not edit the cache contents or its integrity receipt."
+                )
         else:
             if site.exists() or site.is_symlink():
                 seal_cache(site)  # Validate incomplete installer output before discarding it.

@@ -31,11 +31,12 @@ def test_analysis_reenable_requires_explicit_source_reselection(paths):
     assert restored.status()["scopes"] == []
     with pytest.raises(BenchsideError, match="Select accessible"):
         restored.sample([{"scope": scope, "session_ref": "synthetic-session"}])
-    with pytest.raises(BenchsideError, match="current selected sources"):
+    with pytest.raises(BenchsideError, match="was retired"):
         restored.batch(sample["week"])
-    # Existing private data remains available after a new, explicit scope choice.
+    # A fresh choice cannot redraw or restore a withdrawn week's sample.
     restored.scopes([scope])
-    assert restored.batch(sample["week"])["id"] == sample["id"]
+    with pytest.raises(BenchsideError, match="was retired"):
+        restored.batch(sample["week"])
 
 
 def test_reenable_does_not_restore_scopes_from_a_legacy_revocation(paths):

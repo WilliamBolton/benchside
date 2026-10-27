@@ -93,6 +93,46 @@ class Metascience:
             os.environ.get(f"BENCHSIDE_{channel.upper()}_ENDPOINT", f"{COLLECTOR}/v1/{channel}")
         )
 
+    @staticmethod
+    def _retired(week, sample):
+        return sample.inventory_sha256 == digest(["benchside.retired-sample", week])
+
+    @staticmethod
+    def _retirement_message(week):
+        next_week = (date.fromisoformat(week) + timedelta(days=7)).isoformat()
+        return (
+            f"The sample for {week} was retired after an analysis or source change. "
+            "It cannot be resumed or re-sampled. Select approved sources and sample "
+            f"a later UTC week, starting {next_week}."
+        )
+
+    def _retire_samples(self, weeks):
+        """Erase private selections; retain a marker so consent changes cannot redraw a week."""
+        keys = {f"activity:{week}" for week in weeks}
+        samples = dict(self.state.samples)
+        for week in weeks:
+            previous = samples[week]
+            samples[week] = Sample(
+                id=previous.id,
+                inventory_sha256=digest(["benchside.retired-sample", week]),
+                eligible=0,
+                selected={},
+                revision=previous.revision,
+            )
+        return {
+            "samples": samples,
+            "latest": {k: v for k, v in self.state.latest.items() if k not in keys},
+            "drafts": {
+                key: draft
+                for key, draft in self.state.drafts.items()
+                if draft.key not in keys or key in self.state.receipts
+            },
+        }
+
+    def _retained_drafts(self, drafts, latest):
+        keep = set(latest.values()) | set(self.state.receipts)
+        return {key: draft for key, draft in drafts.items() if key in keep}
+
     def status(self):
         return {
             "choices": {
@@ -107,7 +147,14 @@ class Metascience:
                 and key not in self.state.completed
                 and s.active(self.today.isoformat())
             ],
-            "weeks": list(self.state.samples),
+            "weeks": [
+                week
+                for week, sample in self.state.samples.items()
+                if not self._retired(week, sample)
+            ],
+            "retired_weeks": [
+                week for week, sample in self.state.samples.items() if self._retired(week, sample)
+            ],
             "pending_drafts": [
                 d for d in self.state.latest.values() if d not in self.state.receipts
             ],
@@ -123,9 +170,22 @@ class Metascience:
         else:
             grants.pop(choice, None)
         reset_scopes = choice == "analysis" and (not enabled or "analysis" not in self.state.grants)
+        retired = self._retire_samples(self.state.samples) if reset_scopes else {}
+        if reset_scopes:
+            # Survey participation is independent. Keep submitted activity payloads
+            # only as receipt evidence; they contain no source or session references.
+            retired["latest"] = {
+                k: v for k, v in retired["latest"].items() if not k.startswith("activity:")
+            }
+            retired["drafts"] = {
+                k: d
+                for k, d in retired["drafts"].items()
+                if d.channel != "activity" or k in self.state.receipts
+            }
         self._save(
             grants=grants,
             scopes=[] if reset_scopes else self.state.scopes,
+            **retired,
         )
         return self.status()
 
@@ -137,7 +197,15 @@ class Metascience:
         if selected != self.state.scopes:
             # Changing scope invalidates every pending observation approval.
             grants = {**self.state.grants, "analysis": uuid.uuid4().hex}
-            self._save(scopes=selected, grants=grants)
+            current_week = (self.today - timedelta(days=self.today.weekday())).isoformat()
+            narrowed = any(scope not in selected for scope in self.state.scopes)
+            affected = [
+                week
+                for week, sample in self.state.samples.items()
+                if (narrowed and week == current_week)
+                or any(c.scope not in selected for c in sample.selected.values())
+            ]
+            self._save(scopes=selected, grants=grants, **self._retire_samples(affected))
         return self.status()
 
     def invitations(self):
@@ -193,6 +261,9 @@ class Metascience:
             and current.grants == grants
             and current.destination == sink.destination
         ):
+            retained = self._retained_drafts(self.state.drafts, self.state.latest)
+            if len(retained) != len(self.state.drafts):
+                self._save(drafts=retained)
             return current.model_dump()
         draft = MetaDraft(
             id=uuid.uuid4().hex,
@@ -203,10 +274,14 @@ class Metascience:
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             destination=sink.destination,
         )
-        self._save(
-            drafts={**self.state.drafts, draft.id: draft},
-            latest={**self.state.latest, key: draft.id},
-        )
+        latest = {**self.state.latest, key: draft.id}
+        retained = self._retained_drafts({**self.state.drafts, draft.id: draft}, latest)
+        if len(retained) > 1000:
+            raise ValidationError(
+                "Metascience approval and receipt history is full; preserve the notebook "
+                "and arrange archival before creating another draft. Consent can still be withdrawn."
+            )
+        self._save(drafts=retained, latest=latest)
         return draft.model_dump()
 
     def survey(self, study_key, answers):
@@ -249,6 +324,11 @@ class Metascience:
         inventory = digest(sorted(keyed))
         previous = self.state.samples.get(week)
         if previous:
+            if self._retired(week, previous):
+                raise ValidationError(self._retirement_message(week))
+            if any(c.scope not in self.state.scopes for c in previous.selected.values()):
+                self._save(**self._retire_samples([week]))
+                raise ValidationError(self._retirement_message(week))
             if inventory != previous.inventory_sha256:
                 raise ValidationError(
                     "This week's sample is fixed; use metascience.batch to resume it"
@@ -270,8 +350,13 @@ class Metascience:
     def _sample(self, week):
         self._require("analysis")
         sample = self.state.samples.get(week)
-        if not sample or any(c.scope not in self.state.scopes for c in sample.selected.values()):
+        if not sample:
             raise ValidationError("No sample is available within the current selected sources")
+        if self._retired(week, sample):
+            raise ValidationError(self._retirement_message(week))
+        if any(c.scope not in self.state.scopes for c in sample.selected.values()):
+            self._save(**self._retire_samples([week]))
+            raise ValidationError(self._retirement_message(week))
         return sample
 
     def batch(self, week):
@@ -339,7 +424,7 @@ class Metascience:
     def _send(self, draft_id, approved_sha256):
         draft = self.state.drafts.get(draft_id)
         if not draft or self.state.latest.get(draft.key) != draft_id:
-            raise ValidationError("Review the current metascience draft first")
+            raise ConsentRequiredError("Review the current metascience draft first")
         if self._require(*draft.grants) != draft.grants:
             raise ConsentRequiredError("Consent changed; prepare and review a new draft")
         sink = self._sink(draft.channel)

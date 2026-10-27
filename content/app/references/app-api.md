@@ -1,5 +1,11 @@
 # App adapter
 
+Sharing previews retain one current review batch per channel. A replacement
+preview supersedes earlier drafts in that channel, so approve only the current
+preview. An identical preview reuses its draft ID; failed sends retain those
+exact bytes for retry. Original private observations/feedback and submitted
+receipt history remain available.
+
 The assistant executes `python3 <skill-directory>/scripts/benchside_app.py` for an
 installed skill. Source setup saves `runtime/source.json` so this entry can use the
 original Python environment and source directory from any working directory, even

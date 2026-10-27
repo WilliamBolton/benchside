@@ -79,13 +79,15 @@ live Google Docs and ChatGPT Pages save/readback checks for all seven roles. Bot
 installed plugins also passed batched setup and fresh-chat resumption. Claude
 setup took about 7½ minutes and ChatGPT's 2m 21s in individual, non-comparable runs.
 Three scientific overclaims did not recur after the installed role corrections;
-one final reproducibility wording fix and setup-guide clarification are rebuilt
-but not yet installed. Both apps passed submission-failure recovery and consent
-withdrawal, but HTTP 403 blocked delivery before the temporary Worker. Claude's
-Google connector is now connected with specific-file access only, but lacks
-guarded document-content updates and cannot serve as Benchside memory. ChatGPT's
-installed plugin passed Google notebook restoration, update and independent
-readback on 27 October. Cross-app Google continuity has not passed.
+the final reproducibility wording check passed in both installed 0.1.1 plugins.
+Both apps passed submission-failure recovery and consent withdrawal, but HTTP 403
+blocked delivery before the temporary Worker. On 27 October, ChatGPT restored and
+updated the shared Google notebook. After the user approved the separate Google
+Docs connector, Claude resumed that same project and saved a synthetic decision
+using a guarded update. Independent readback verified both the state and journal;
+Google metadata showed both documents unshared. The earlier Drive-only check did
+not test this editing connector. The rebuilt 0.1.2 fixes still need installed
+update acceptance; update all apps sharing a notebook together.
 Claude's native Docs tools do not expose sharing permissions, so a private sharing
 state must be verified in the UI. Other accounts/connectors still need acceptance.
 See the [27 October release review](release-review-2026-10-27.md) and
@@ -105,6 +107,13 @@ review, the agent can load `plugins/benchside` with `--plugin-dir` after buildin
 the package. These routes do not publish a listing or deploy any backend.
 See [Claude's installation guidance](https://support.claude.com/en/articles/13837440-use-plugins-in-claude)
 and [manifest reference](https://code.claude.com/docs/en/plugins-reference).
+
+For updates, use your app's plugin replacement flow. An agent handling a manual
+installation should stage the new release in a clean directory and preserve any
+customizations before replacing the managed installation. Do not unzip a package
+over an earlier source installation: old runtime settings and removed files can
+remain active. Keep research records in their existing storage and reopen the
+same project after updating.
 
 ## Optional sharing
 
