@@ -1,0 +1,101 @@
+# One optional sharing flow
+
+Offer these choices together in plain language during first setup, alongside the
+optional studies described in `onboarding.md`. Existing preferences persist. A
+broad "yes" to contributing needs a choice of categories before consent is saved.
+Declining or deciding later leaves unchosen options off; do not repeatedly prompt
+on return. At natural stopping points, offer reviews for enabled choices.
+
+1. Workflow observations: edited descriptions of missing tools, hard-to-find data,
+   repeated manual work, dead ends and missing indexes. No project or installation IDs.
+2. Feedback: the researcher's ease-of-use rating (1–5), whether they would use
+   Benchside again (`yes`, `no`, `unsure`), and an optional comment. Never infer a
+   rating from their conversation. No installation, sitting or gap identifiers.
+3. Usage: weekly consultation counts, role/app/version information and standardised
+   failure counts. A random persistent installation ID estimates returning use.
+   No research text, project titles, conversation IDs or exact activity times.
+   Optional, self-reported discipline and career-stage categories are included
+   only with the separate profile choice below.
+
+Before preparing any free-text observation or feedback comment, remove scientific
+results, hypotheses, measurements, identifying sample/data details, detailed
+protocols or analyses, source passages and project-specific names. Describe the
+general workflow need instead, or omit the item if generalising it would change
+its meaning. Sharing consent does not make these research details eligible.
+The format permits free text, so automatic identifier scrubbing cannot enforce
+this boundary by itself; the assistant must check the content before preview.
+
+Data goes to Science Works' collector. These choices are separate from private
+scientific records. An installation is not necessarily a person. Revoking consent
+stops future submissions; it does not delete previously received data.
+
+## Calls
+
+- `sharing.status` returns current choices.
+- `sharing.consent` takes `channel` (`gaps`, `feedback`, `usage`) and boolean
+  `enabled`. For gaps also supply `kinds`, selected from the five supported kinds.
+  Only call after the researcher makes that choice.
+- `sharing.feedback` takes `feedback: {role, host, surface, ease, would_use_again, comment}`.
+  Unknown role/app/surface values use `unknown`. Returns an independently generated
+  feedback ID. This saves locally and sends nothing.
+- `sharing.preview` takes `channel`. Gaps optionally take `only: [observation IDs]`
+  and `edits: {observation ID: reviewed gap object}`; feedback takes `feedback_id`
+  and optionally an edited `comment`; usage optionally takes `week` (Monday date).
+- The preview returns one or more drafts, each containing its exact `payload`,
+  `destination`, `payload_sha256` and draft `id`. Display the complete content of
+  each draft in readable form, including every text field and usage count, plus the
+  recipient. Explain that redaction cannot catch all identifying research details.
+  If the researcher edits anything, prepare and show a new draft.
+- After explicit approval, call `sharing.send` with that `draft_id` and its
+  `approved_sha256`. Do not replace the payload, infer approval, or send subsequent
+  batches that were not reviewed. A rejected or uncertain submission stays pending.
+  Retry the same draft after a network failure; do not regenerate it to retry.
+- `sharing.history` returns receipts. Give the researcher the channel, digest and
+  received date for an operator-assisted removal request. Usage can additionally
+  be located with their installation ID. Do not send a removal request yourself
+  unless the researcher explicitly asks.
+
+Usage reports are cumulative weekly snapshots. Repeated reporting replaces older
+revisions in analysis; it does not add another session. End of a chat is not
+abandonment. Offer a refreshed usage preview when the researcher next returns,
+without interrupting their work or creating an unsolicited automation.
+
+## Optional demographic categories
+
+`profile.status` returns the private profile and its revision (zero means no
+choice has been saved). `profile.set` replaces it:
+
+```json
+{"action":"profile.set","demographics":{"discipline":"life_sciences","career_stage":"doctoral_researcher"},"include_in_usage":true}
+```
+
+Only save the researcher's actual selections. `demographics:{}` skips both;
+either field may be omitted or null. `include_in_usage` defaults to false in a
+new store and must be explicitly supplied when changing the profile. It is
+independent of usage consent and never sends data by itself. The host uses normal
+native save/readback for this state when cloud storage is selected.
+
+Present these values with readable labels, not code identifiers:
+
+- Discipline: life sciences, medical/health sciences, physical sciences,
+  mathematics/statistics, computer/information sciences, engineering/technology,
+  earth/environmental sciences, social sciences, humanities/arts,
+  interdisciplinary, other, prefer not to say.
+- Career stage: undergraduate student, master's student, doctoral researcher,
+  postdoctoral researcher, research staff, independent researcher or group
+  leader, other, prefer not to say.
+
+Wire values use underscores (`medical_health_sciences`, `masters_student`,
+`independent_researcher_or_group_leader`, `prefer_not_to_say`, etc.). Do not
+request free-text details for “other”, an institution, age, name or email.
+Do not infer answers. An omitted answer differs from an explicit “prefer not
+to say”. The profile belongs to this chosen store; for a store shared by several
+people, skip demographic reporting rather than assign one person's categories
+to everyone.
+
+If opted in, the exact usage preview shows the selected categories alongside the
+random installation ID. They never enter gap observations, feedback, survey or
+activity payloads. Changing or disabling the profile invalidates pending usage
+drafts; make a new preview and obtain approval. It does not erase reports already
+received. Aggregate reports count the latest accepted profile per participating
+installation, without linking individual observations or feedback to it.

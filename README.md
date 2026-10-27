@@ -9,125 +9,169 @@
   <p><b>An AI workspace for doing science.</b></p>
 
   <p>
-    <img alt="Python 3.13+" src="https://img.shields.io/badge/python-3.13%2B-4dd0e1?style=flat-square">
+    <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-4dd0e1?style=flat-square">
     <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square">
     <img alt="Status" src="https://img.shields.io/badge/status-prototype-f0a832?style=flat-square">
   </p>
 </div>
 
-benchside turns conversations with AI colleagues into a durable scientific
-record. You think out loud; the parts worth keeping become structured data
-that your next conversation remembers and you can query.
+Benchside turns research discussions into a private scientific record that you
+can return to: decisions, evidence, unresolved questions and next steps.
 
-Four pieces make that work:
+All seven roles are included:
 
-- **Personas** — Claude Code skills that play a role from real practice.
-  `/pi` is a supervisor meeting; an adversarial reviewer and an
-  experiment-design partner are planned.
-- **Sittings** — one conversation with one persona.
-- **The journal** — the typed, append-only record every sitting writes.
-  Local, per project.
-- **Export** — the only path off your machine. Opt-in, previewable, and off
-  by default.
+| Role | Scientific output |
+|---|---|
+| `/pi` | Hypothesis, challenges and next step |
+| `/study-design` | Study outline, comparisons, controls and assumptions |
+| `/methods-clinic` | Discrepancy, possible causes and diagnostic checks |
+| `/results-meeting` | Evidence-to-claim assessment and follow-up |
+| `/repro-check` | Reproducibility and handover checklist |
+| `/journal-club` | Source-grounded appraisal of accessible papers |
+| `/peer-review` | Major/minor scientific concerns and revision priorities |
 
-<div align="center">
-  <img src="docs/assets/journal-show.svg" alt="bench journal show" width="740">
-</div>
+## Guided app setup
 
-## Install
+See [Getting started](docs/getting-started.md) for setup without terminal commands
+or API keys. Installable Claude and ChatGPT/Codex packages are built from this
+repository. Native memory uses a private notebook in ChatGPT Space (or compatible
+Claude Docs), with readable journals per project. Guarded saves and readback
+protect the validated record; the execution sandbox is disposable. Both installed
+plugins passed synthetic native saves and fresh-chat restoration on 23 October.
+Shared Google storage across the apps remains a separate acceptance check.
+See the [rollout checks](docs/rollout.md) before
+inviting researchers through a particular app route.
+
+A research sitting can continue across conversations. New roles save an
+appropriate scientific output and a decision before concluding; they can discuss
+a method, result or paper without inventing a hypothesis. `/pi` keeps its
+hypothesis requirement. Pausing leaves the sitting open; closing a chat is not
+recorded as abandonment.
+
+## Private records
+
+The append-only journal lives outside Git: in the private native notebook for
+cloud accounts, or by default at `~/.local/share/benchside/projects/<id>/journal.jsonl`
+for local desktop use. The runtime records
+hypotheses, targeted critiques and resolutions, decisions with rationale,
+role-specific scientific outputs with sources, and local workflow observations.
+It restores the project record and unfinished sittings when you return.
+
+Local Claude Code hooks also inject recall and archive transcripts. Session
+identity is passed to each conversation's shell, so concurrent conversations
+are not all attributed to whichever one started last.
+
+## Optional sharing
+
+One flow offers three independent choices: workflow observations, usability
+feedback and weekly usage reporting. All are off until consented, and every
+submission needs an exact preview and approval.
+
+- Workflow observations capture general research-workflow friction and problems
+  for metascience research, using the existing `benchside.gaps.v1` format. They
+  exclude project, session, feedback and installation IDs. Free text is scrubbed
+  and reviewed because a schema cannot guarantee anonymity.
+- Feedback contains an ease-of-use rating, repeat-use intent and optional comment.
+- Usage contains weekly counts and role/app/version information, with a random
+  installation ID to estimate returning use. It never contains research text.
+- Prepared drafts can select or edit observations. Sending verifies the consent,
+  reviewed digest, destination, size limits and collector receipt. Retrying a
+  successful draft does not send it again.
+- Revoking consent stops future reporting. Receipts support review and
+  operator-assisted removal of earlier submissions.
+
+The Science Works endpoint is included in the product; researchers configure no
+credentials. **Feedback and usage routes must be deployed from the companion
+`science-works/benchside-ingest` repository before receiving real submissions.**
+
+## Optional studies and wider observation
+
+The app skill also supports occasional study invitations and private analysis
+of selected research conversations, including work without a Benchside role.
+These are separate opt-in choices, with reviewed sharing as a third choice.
+Invitations are capped at one per week; analysis samples 10% of eligible accessible
+sessions, up to five per week. Only reviewed categories leave the app, with no
+raw logs or installation/project/conversation identifiers. A centrally published
+catalog supports new surveys without reinstalling the client.
+
+See [the metascience implementation and review guide](docs/metascience.md).
+The survey/activity routes still require deployment. The catalog starts empty,
+and installation creates no background listener or schedule. Scheduled checks
+depend on explicit researcher setup and the host's available tools.
+
+## Git and terminal installation
+
+This route remains available alongside plugins and in-app skills. An agent with
+local execution tools can perform installation and setup for the researcher.
+An agent can read [the setup flow](content/app/references/onboarding.md), install
+from source, and run the same JSON interface used by the plugins. Setup asks for
+a local directory, private native documents, or a compatible installed connector.
+Claude and Codex can continue the same project in a shared accessible store.
+The expanded review build has not yet been published to the default Git branch.
 
 ```bash
 uv tool install git+https://github.com/science-works/benchside
-
-bench setup    # once per machine: installs the /bench-init skill
+bench setup
+bench init
 ```
 
-Then, in a research project directory:
+The default commands retain the legacy Claude Code setup. For Codex use
+`bench setup --agent codex`; for another agent use `bench setup --agent generic
+--skills-dir <its skill directory>`. The shared Benchside skill includes every
+role and uses `bench app`, with no Claude hooks required. An agent can perform
+these steps for the researcher. `--storage /absolute/chosen/folder` remembers an
+explicit local choice; native or connected memory is chosen through guided setup.
 
-```bash
-bench init     # or run /bench-init inside a Claude session
-```
-
-`init` asks before writing anything. It sets up the project id, two session
-hooks (memory injection, transcript archival), and the `/pi` skill. After
-that, open Claude Code and type `/pi`.
-
-## Sittings
-
-A sitting is one conversation with one persona.
-
-- The persona opens it, records into it, and closes it — you talk, it runs
-  the `bench` commands.
-- A sitting ends **converged** (you agreed a next step) or **abandoned**.
-- Each persona declares what a sitting must capture before it can converge.
-  `/pi` won't close converged without a recorded hypothesis — enforced by
-  the CLI, not by hoping the prompt works.
-- Nothing is lost if you `/clear` or close the terminal: the sitting stays
-  open in the journal, and your next session is told about it.
-
-## The journal
-
-Each project gets an append-only journal at
-`~/.local/share/benchside/projects/<id>/`. Five kinds of things get recorded:
-
-| Entry | What it holds |
-|---|---|
-| **hypothesis** | a falsifiable statement; may supersede an earlier one |
-| **critique** | a challenge, always aimed at something specific — a claim, a method step, or an interpretation — plus how it was resolved |
-| **decision** | a durable call and the *reason* for it, so it isn't re-litigated next month |
-| **gap** | a place your workflow broke: missing tool, unfindable data, manual toil, dead end, missing index |
-| **sitting** | when it opened, which persona, how it ended |
-
-Query it any time:
-
-```bash
-bench journal show          # the dashboard: current hypothesis, open critiques, latest decision
-bench journal hypotheses    # the supersession chain
-bench journal critiques     # what's open, what was resolved and how
-bench journal decisions
-bench journal events        # the raw stream (--json for machines)
-```
-
-Every new Claude session starts with the current state — hypothesis, open
-questions, recent decisions — injected automatically. That's the point: the
-persona remembers your project, not just your last message.
-
-## Export
-
-Sharing is a separate, deliberate act:
-
-- Off by default. The default export sink refuses to send even if asked.
-- Only **gap** entries are exportable. The export schema has no field for
-  hypotheses, results, or data.
-- `bench share grant` opts in (revocable); `bench share preview` shows the
-  exact bytes an export would send; `bench share send` sends them.
-- Every export is recorded in a local ledger: what left, when, under which
-  grant.
-
-## CLI at a glance
+`bench init` retains the optional Claude Code project identity, per-role skills
+and session hooks. `bench init --agent codex` or `--agent generic` installs the
+shared skill without Claude settings. Legacy CLI project journals are separate
+from app project IDs; setup does not silently migrate them.
 
 ```text
-setup, init, project, compile     get set up
-sitting open|status|close         manage the current sitting
+sitting open|resume|status|close   manage a research discussion
 hypothesis, critique, resolve,
-decide, gap                       record what happened (used mid-sitting)
-journal <view>                    query the record
-share <action>                    consent, preview, export
-recall                            what a persona reads on arrival
+decide, record, gap               record scientific work and workflow problems
+journal <view>, recall            read the project record
+share status|grant|revoke         control the three sharing choices
+share feedback|preview|send       review optional submissions
+share history                    inspect receipts
 ```
 
-## Development
+For sharing, `bench share grant --channel gaps --kinds missing_index` enables
+that choice. `bench share preview` saves a draft; `bench share send --draft <id>
+--approve-sha256 <reviewed digest>` submits exactly that draft. Use `--channel
+feedback` or `--channel usage` for those choices, and `bench share revoke
+--channel all` to stop all reporting. Scientists can do this through the
+assistant instead of typing commands.
+
+## Development and packaging
 
 ```bash
-uv sync
-uv run pytest                    # fast, no API key — run before every commit
+uv sync --frozen
+uv run pytest
 uv run ruff check benchside
-uv run bench compile --check     # compiled skills must match their sources
+uv run bench compile --check
+uv build --wheel
+uv run --with pip python scripts/build_release.py
 ```
 
-Personas are YAML records compiled to skills — adding one is adding a file.
-The project is strict TDD; design rationale lives in
-[ARCHITECTURE.md](ARCHITECTURE.md).
+Personas are YAML records; edit their sources and run `bench compile`. The app
+package uses the same records, core wheel and pinned dependency lock. Build
+outputs are `dist/benchside-claude-0.1.1.zip` (standalone skill),
+`dist/benchside-plugin-0.1.1.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.1.1.zip` (Claude plugin upload). All use the same
+core and central submission endpoints. The build downloads hash-locked wheels
+for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
+Installed app packages bootstrap offline; they do not need access to PyPI.
+
+Generate an aggregate rollout report from authorised collector downloads with
+`python -m benchside.reporting <directory>` (or add `--json`). It deduplicates
+retries and replaces earlier weekly snapshots, without joining individual
+submissions across channels. Installation counts are not exact people.
+
+[ARCHITECTURE.md](ARCHITECTURE.md) explains the implementation.
+[Rollout notes](docs/rollout.md) describe the remaining live-app checks and keep
+the original workshop evaluation separate from exploratory rollout results.
 
 ## License
 

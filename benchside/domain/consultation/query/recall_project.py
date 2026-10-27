@@ -6,7 +6,7 @@ record, never re-summarised from conversation prose.
 
 from pydantic import Field
 
-from benchside.domain.consultation.model.value import Decision, Target
+from benchside.domain.consultation.model.value import Decision, ResearchRecord, Target
 from benchside.domain.consultation.service.consultation import ConsultationService
 from benchside.domain.shared.command import Result
 from benchside.domain.shared.error import NotFoundError
@@ -25,6 +25,8 @@ class ProjectRecall(Result):
     open_questions: list[str] = Field(default_factory=list)
     recent_decisions: list[Decision] = Field(default_factory=list)
     last_sitting_state: str | None = None
+    recent_records: list[ResearchRecord] = Field(default_factory=list)
+    open_sittings: list[dict[str, str]] = Field(default_factory=list)
 
 
 class RecallProjectHandler(QueryHandler[RecallProject, ProjectRecall]):
@@ -46,6 +48,12 @@ class RecallProjectHandler(QueryHandler[RecallProject, ProjectRecall]):
             open_questions=[describe_target(c.target) for c in project.critiques if c.is_open],
             recent_decisions=project.decisions[-5:],
             last_sitting_state=latest.state.kind if latest else None,
+            recent_records=project.research_records[-5:],
+            open_sittings=[
+                {"id": c.id, "persona": c.persona_id.root}
+                for c in self.consultation_service.consultations.list_for_project(project.id)
+                if c.state.kind not in {"converged", "abandoned"}
+            ],
         )
 
 
@@ -53,8 +61,8 @@ def describe_target(target: Target) -> str:
     """Render a critique target as one line for the persona to read back."""
     match target.kind:
         case "claim":
-            return f"claim: {target.claim}"
+            return f"claim: {target.claim}; concern: {target.ground}"
         case "method":
             return f"method ({target.flaw}): {target.step}"
         case _:
-            return f"interpretation: {target.result}"
+            return f"interpretation: {target.result}; alternative: {target.alternative}"

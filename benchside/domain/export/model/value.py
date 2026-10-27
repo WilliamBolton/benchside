@@ -53,6 +53,8 @@ class ExportRecord(ValueObject):
     observation_ids: tuple[ObservationId, ...]
     payload_sha256: str
     exported_at: datetime
+    destination: str = ""
+    received_at: str | None = None
 
 
 class ExportPreview(ValueObject):
@@ -62,3 +64,13 @@ class ExportPreview(ValueObject):
     observation_ids: tuple[ObservationId, ...]
     withheld: tuple[ObservationId, ...] = ()
     redaction_findings: tuple[str, ...] = ()
+    grant_id: GrantId | None = None
+    payload_sha256: str = ""
+    destination: str = ""
+
+
+class DeliveryReceipt(ValueObject):
+    status: str
+    sha256: str
+    received_at: str
+    observations: int

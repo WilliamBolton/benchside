@@ -1,0 +1,515 @@
+"""Portable native-document memory, independent of an execution sandbox.
+
+The host reads/writes the private document with its own authorized tools. This
+module validates and runs a transaction in a disposable directory and returns a
+candidate snapshot. Only guarded host save + readback confirms persistence.
+Compression is for document size, not encryption or anonymisation.
+"""
+
+import base64
+import copy
+import hashlib
+import json
+import re
+import tempfile
+import uuid
+import zlib
+from pathlib import Path
+
+from benchside.application.app import READ_ACTIONS, App
+from benchside.application.sharing import ParticipationChoice, SubmissionDraft
+from benchside.config import Paths
+from benchside.domain.export.model.metascience import MetaState
+from benchside.domain.export.model.reporting import ResearchProfile, UsagePayload
+from benchside.domain.shared.error import BenchsideError, ValidationError
+from benchside.domain.shared.event import Event
+from benchside.infrastructure.journal.registry import ensure_events_registered
+from benchside.infrastructure.session_context import validate_session_id
+
+SCHEMA = "benchside.native.v1"
+MAX_DOCUMENT_BYTES = 190_000  # Fits one native Pages edit with room for transport metadata.
+MAX_STATE_BYTES = 8 * 1024 * 1024
+PROJECT = r"p-[a-f0-9]{32}"
+FILE = re.compile(
+    rf"(?:app-projects/{PROJECT}\.json|app-sessions/[a-f0-9]{{32}}\.json|"
+    rf"projects/(?:{PROJECT}|consent-ledger|reporting-ledger)/journal\.jsonl|"
+    r"sharing/drafts/[a-f0-9]{32}\.json|"
+    r"reporting/(?:installation|profile|participation|usage-\d{4}-\d{2}-\d{2})\.json|metascience/state\.json)"
+)
+HEX = re.compile(r"[a-f0-9]{32}")
+
+
+def _json(value):
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+
+
+def _digest(value):
+    return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
+
+
+def _pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _loads(text):
+    return json.loads(text, object_pairs_hook=_pairs)
+
+
+def _fail(message):
+    raise ValidationError(message, code="native_storage_invalid")
+
+
+def _check_files(files):
+    ensure_events_registered()
+    if not isinstance(files, dict):
+        _fail("Native memory files must be an object")
+    for name, text in files.items():
+        if not FILE.fullmatch(name) or not isinstance(text, str):
+            _fail("Native memory contains an unsupported file")
+        if name.endswith("journal.jsonl"):
+            project = name.split("/")[1]
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                envelope = _loads(line)
+                if set(envelope) != {"type", "session", "data"}:
+                    _fail("Native journal envelope is incomplete")
+                if envelope["session"] is not None:
+                    validate_session_id(envelope["session"])
+                event_type = Event.resolve(envelope["type"])
+                event_type.model_validate(envelope["data"])
+                if set(envelope["data"]) - set(event_type.model_fields):
+                    _fail("Native journal contains unknown event fields")
+                if "project_id" in envelope["data"] and envelope["data"]["project_id"] != project:
+                    _fail("Native journal event belongs to another project")
+        elif name == "reporting/profile.json":
+            ResearchProfile.model_validate_json(text)
+        elif name == "reporting/participation.json":
+            ParticipationChoice.model_validate_json(text)
+        elif name == "metascience/state.json":
+            MetaState.model_validate_json(text)
+        elif name.startswith("sharing/"):
+            draft = SubmissionDraft.model_validate_json(text)
+            if Path(name).stem != draft.id:
+                _fail("Native draft identifier does not match its filename")
+        elif name.startswith("reporting/usage-"):
+            usage = UsagePayload.model_validate_json(text)
+            if name != f"reporting/usage-{usage.week}.json":
+                _fail("Native usage week does not match its filename")
+        else:
+            data = _loads(text)
+            if name == "reporting/installation.json":
+                if set(data) != {"id"} or not HEX.fullmatch(data["id"]):
+                    _fail("Invalid native installation identity")
+            elif (
+                (set(data) - ({"title"} if name.startswith("app-projects/") else set()))
+                != (
+                    {"host", "app_version", "surface", "project_id"}
+                    if name.startswith("app-sessions/")
+                    else {"host", "app_version", "surface"}
+                )
+                or data["host"] not in {"claude", "chatgpt", "unknown"}
+                or data["surface"] not in {"web", "desktop", "cli", "unknown"}
+                or not isinstance(data["app_version"], str)
+            ):
+                _fail("Invalid native project configuration")
+            if "title" in data and (
+                not isinstance(data["title"], str)
+                or not 1 <= len(data["title"]) <= 160
+                or any(ord(char) < 32 for char in data["title"])
+            ):
+                _fail("Invalid native project title")
+            if name.startswith("app-sessions/") and (
+                not isinstance(data.get("project_id"), str)
+                or not re.fullmatch(PROJECT, data["project_id"])
+                or f"app-projects/{data['project_id']}.json" not in files
+            ):
+                _fail("Native session references a missing project")
+
+
+def _validate_body(body):
+    if not isinstance(body, dict) or set(body) != {"files", "projects", "operations"}:
+        _fail("Invalid native memory contents")
+    _check_files(body["files"])
+    if not isinstance(body["projects"], dict) or not isinstance(body["operations"], dict):
+        _fail("Invalid native project or operation index")
+    for identifier, project in body["projects"].items():
+        if not re.fullmatch(PROJECT, identifier):
+            _fail("Invalid native project identity")
+        if f"app-projects/{identifier}.json" not in body["files"]:
+            _fail("Native project configuration is missing")
+        _validate_project(project)
+        config = _loads(body["files"][f"app-projects/{identifier}.json"])
+        key = f"{config['host']}:{project['document_id']}"
+        if identifier != "p-" + hashlib.sha256(key.encode()).hexdigest()[:32]:
+            _fail("Native project document does not match its stable identity")
+    for identifier, operation in body["operations"].items():
+        if not HEX.fullmatch(identifier) or not isinstance(operation, dict):
+            _fail("Invalid native operation identity")
+        if set(operation) != {"request_sha256", "result"} or not re.fullmatch(
+            r"[a-f0-9]{64}", operation["request_sha256"]
+        ):
+            _fail("Invalid native operation receipt")
+
+
+def _validate_project(project):
+    if not isinstance(project, dict) or set(project) != {"document_id", "title"}:
+        _fail("Provide the native project document ID and title")
+    if any(
+        not isinstance(project[key], str)
+        or not 1 <= len(project[key]) <= limit
+        or any(ord(char) < 32 for char in project[key])
+        for key, limit in (("document_id", 256), ("title", 160))
+    ):
+        _fail("Invalid native project document ID or title")
+
+
+def pack(body, workspace_id, revision):
+    _validate_body(body)
+    raw = _json(body).encode("utf-8")
+    if len(raw) > MAX_STATE_BYTES:
+        _fail("Native notebook is full; preserve it and archive before adding more records")
+    snapshot = {
+        "schema": SCHEMA,
+        "workspace_id": workspace_id,
+        "revision": revision,
+        "payload": base64.b64encode(zlib.compress(raw)).decode("ascii"),
+    }
+    snapshot["sha256"] = _digest(snapshot)
+    if len(_json(snapshot).encode("utf-8")) > MAX_DOCUMENT_BYTES:
+        _fail("Native notebook is full; preserve it and archive before adding more records")
+    return snapshot
+
+
+def unpack(document, expected_workspace_id=None):
+    """Reject damaged/foreign memory before restoring anything to a filesystem."""
+    try:
+        if isinstance(document, str):
+            if len(document.encode("utf-8")) > MAX_DOCUMENT_BYTES + 4096:
+                _fail("Native memory document is too large")
+            if document.strip().startswith("{"):
+                snapshot = _loads(document)
+            else:
+                blocks = re.findall(
+                    r"^```json\s*\n(.*?)\n```\s*$", document, re.MULTILINE | re.DOTALL
+                )
+                if len(blocks) != 1:
+                    _fail("Read the complete, single Benchside state block")
+                snapshot = _loads(blocks[0])
+        else:
+            snapshot = document
+        if not isinstance(snapshot, dict) or set(snapshot) != {
+            "schema",
+            "workspace_id",
+            "revision",
+            "payload",
+            "sha256",
+        }:
+            _fail("Invalid native memory envelope")
+        if (
+            snapshot["schema"] != SCHEMA
+            or not HEX.fullmatch(snapshot["workspace_id"])
+            or type(snapshot["revision"]) is not int
+            or snapshot["revision"] < 0
+            or len(_json(snapshot).encode("utf-8")) > MAX_DOCUMENT_BYTES
+        ):
+            _fail("Unsupported native memory version or identity")
+        if expected_workspace_id and snapshot["workspace_id"] != expected_workspace_id:
+            _fail("This document belongs to another Benchside notebook")
+        unsigned = {key: value for key, value in snapshot.items() if key != "sha256"}
+        if snapshot["sha256"] != _digest(unsigned):
+            _fail(
+                "Native memory checksum failed; keep the document and recover its last good version"
+            )
+        compressed = base64.b64decode(snapshot["payload"], validate=True)
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(compressed, MAX_STATE_BYTES + 1)
+        if len(raw) > MAX_STATE_BYTES or not decoder.eof or decoder.unused_data:
+            _fail("Invalid or oversized compressed native memory")
+        body = _loads(raw.decode("utf-8"))
+        _validate_body(body)
+        return snapshot, body
+    except (ValueError, KeyError, TypeError, AttributeError, zlib.error) as error:
+        raise ValidationError(
+            "Native memory could not be validated", code="native_storage_invalid"
+        ) from error
+
+
+def markdown(snapshot):
+    return "```json\n" + _json(snapshot) + "\n```"
+
+
+def reference(snapshot):
+    return {key: snapshot[key] for key in ("workspace_id", "revision", "sha256")}
+
+
+def _restore(files, home):
+    for name, content in files.items():
+        path = home / name  # All paths have been allowlisted by unpack.
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.write_text(content, encoding="utf-8")
+        path.chmod(0o600)
+
+
+def _capture(home):
+    return {
+        path.relative_to(home).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(home.rglob("*"))
+        if path.is_file() and FILE.fullmatch(path.relative_to(home).as_posix())
+    }
+
+
+def _quote(text):
+    # Scientific text stays quoted content, never executable Page/agent instructions.
+    return "\n".join("> " + line for line in str(text).splitlines())
+
+
+def journal_view(app, project_id, projects, revision):
+    recall = app.run({"action": "recall", "project_id": project_id})
+    lines = [
+        f"Saved notebook revision: {revision}.",
+        (
+            "This page is a readable view. Benchside restores the validated private notebook; "
+            "ask Benchside to record corrections so history is preserved."
+        ),
+        "## Current hypothesis",
+        _quote(recall["current_hypothesis"]) if recall["current_hypothesis"] else "None recorded.",
+        "## Unresolved questions",
+        *[_quote(question) for question in recall["open_questions"]],
+    ]
+    if not recall["open_questions"]:
+        lines.append("None recorded.")
+    lines.append("## Recent decisions")
+    for decision in recall["recent_decisions"]:
+        lines.extend([_quote(decision["decision"]), _quote(decision["rationale"])])
+    lines.append("## Recent research records")
+    for record in recall["recent_records"]:
+        lines.append(_quote(record["summary"]))
+        lines.extend(_quote(detail) for detail in record["details"])
+        lines.extend(_quote("Source: " + source) for source in record["sources"])
+    lines.append("## Open discussions")
+    lines.extend(
+        _quote(sitting["persona"] + ": " + sitting["id"]) for sitting in recall["open_sittings"]
+    )
+    if not recall["open_sittings"]:
+        lines.append("None open.")
+    return {
+        "project_id": project_id,
+        **projects.get(project_id, {}),
+        "markdown": "\n\n".join(lines),
+    }
+
+
+BATCH_ACTIONS = {
+    "setup",
+    "roles",
+    "projects",
+    "recall",
+    "start",
+    "hypothesis",
+    "record",
+    "critique",
+    "resolve",
+    "decide",
+    "gap",
+    "close",
+    "profile.status",
+    "profile.set",
+    "participation.status",
+    "participation.set",
+    "sharing.status",
+    "sharing.consent",
+    "metascience.status",
+    "metascience.consent",
+    "metascience.scopes",
+}
+
+
+def _references(value, results):
+    if isinstance(value, dict):
+        if set(value) == {"$ref"}:
+            path = value["$ref"]
+            if not isinstance(path, str):
+                _fail("A batch reference must name an earlier step result")
+            resolved = results
+            for key in path.split("."):
+                if not isinstance(resolved, dict) or key not in resolved:
+                    _fail("A batch reference must name an earlier step result")
+                resolved = resolved[key]
+            return copy.deepcopy(resolved)
+        return {key: _references(item, results) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_references(item, results) for item in value]
+    return value
+
+
+def _checked_command(body, command, project):
+    if not isinstance(command, dict) or not isinstance(command.get("action"), str):
+        _fail("Provide an app request inside native.run")
+    if command["action"].startswith(("native.", "storage.")):
+        _fail("Native documents replace the local storage probe")
+    if command["action"] == "setup":
+        _validate_project(project)
+        selected = command.get("project_id")
+        if selected:
+            existing = body["projects"].get(selected)
+            if not existing or existing["document_id"] != project["document_id"]:
+                _fail("Select the existing project and its registered journal document")
+        elif command.get("project_key") != project["document_id"]:
+            _fail("Use the observed native project document ID as project_key")
+        command = {**command, "title": project["title"]}
+    elif project is not None:
+        _fail("Project document registration is only supported during setup")
+    return command
+
+
+def _execute(app, body, command, project):
+    command = _checked_command(body, command, project)
+    result = app.run(command)
+    if project is not None:
+        body["projects"][result["project_id"]] = project
+    # Older notebooks can have the friendly title only in the native index.
+    project_id = command.get("project_id")
+    if project_id in body["projects"] and isinstance(result, dict):
+        recalled = result if command["action"] == "recall" else result.get("recall")
+        if isinstance(recalled, dict):
+            recalled["title"] = body["projects"][project_id]["title"]
+    return result
+
+
+def _execute_batch(app, body, steps):
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 16:
+        _fail("A native batch needs 1–16 private steps")
+    identifiers = set()
+    # Validate the whole action list before executing any step. Network and
+    # preview/approval actions must remain separate from these private saves.
+    for step in steps:
+        if not isinstance(step, dict) or set(step) - {"id", "request", "project_document"}:
+            _fail("Invalid native batch step")
+        identifier = step.get("id")
+        if not isinstance(identifier, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", identifier):
+            _fail("Use a short unique batch step ID")
+        if identifier in identifiers:
+            _fail("Use a short unique batch step ID")
+        identifiers.add(identifier)
+        command = step.get("request")
+        if (
+            not isinstance(command, dict)
+            or not isinstance(command.get("action"), str)
+            or command["action"] not in BATCH_ACTIONS
+        ):
+            _fail("Batches support private actions only; keep network and previews separate")
+    results = {}
+    project_id = None
+    for step in steps:
+        command = _references(step["request"], results)
+        result = _execute(app, body, command, step.get("project_document"))
+        results[step["id"]] = result
+        project_id = command.get("project_id", project_id)
+        if command["action"] == "setup":
+            project_id = result["project_id"]
+    return {"steps": results, "project_id": project_id}
+
+
+def run_native(request):
+    """Host-neutral entry point used by the bundled app script."""
+    action = request["action"]
+    if action == "native.create":
+        snapshot = pack({"files": {}, "projects": {}, "operations": {}}, uuid.uuid4().hex, 0)
+        return {"snapshot": snapshot, "markdown": markdown(snapshot), "saved": False}
+    if action not in {"native.inspect", "native.run", "native.batch", "native.confirm"}:
+        _fail("Unknown native memory action")
+    expected = request.get("workspace_id")
+    if not isinstance(expected, str) or not HEX.fullmatch(expected):
+        _fail("Use the notebook workspace ID returned by native.create")
+    snapshot, body = unpack(request["document"], expected)
+    if action == "native.confirm":
+        if reference(snapshot) != request.get("expected"):
+            raise ValidationError(
+                "Native save was not confirmed; reread and reconcile before retrying",
+                code="native_save_conflict",
+            )
+        return {"saved": True, **reference(snapshot)}
+    if action == "native.inspect":
+        return {**reference(snapshot), "projects": body["projects"]}
+
+    batch = action == "native.batch"
+    command = {"action": "batch", "steps": request.get("steps")} if batch else request["request"]
+    if not isinstance(command, dict) or not isinstance(command.get("action"), str):
+        _fail("Provide an app request inside native.run")
+    project = request.get("project_document")
+    if batch and project is not None:
+        _fail("Put project_document on the batch setup step")
+    if not batch:
+        _checked_command(body, command, project)
+    operation_id = request.get("operation_id", uuid.uuid4().hex)
+    if not isinstance(operation_id, str) or not HEX.fullmatch(operation_id):
+        _fail("Use a 32-character hexadecimal operation ID")
+    request_hash = _digest({"request": command, "project_document": project})
+    previous = body["operations"].get(operation_id)
+    if previous and previous["request_sha256"] != request_hash:
+        _fail("This operation ID was already used for a different request")
+
+    original_body = copy.deepcopy(body)
+    with tempfile.TemporaryDirectory(prefix="benchside-native-") as temporary:
+        home = Path(temporary)
+        _restore(body["files"], home)
+        app = App(Paths(home=home, repo_root=home))
+        outcome = {"ok": True}
+        if previous:
+            result = previous["result"]
+        else:
+            try:
+                result = (
+                    _execute_batch(app, body, command["steps"])
+                    if batch
+                    else _execute(app, body, command, project)
+                )
+                mutates = (
+                    any(step["request"]["action"] not in READ_ACTIONS for step in command["steps"])
+                    if batch
+                    else command["action"] not in READ_ACTIONS
+                )
+                if mutates:
+                    body["operations"][operation_id] = {
+                        "request_sha256": request_hash,
+                        "result": result,
+                    }
+            except BenchsideError as error:
+                result = None
+                outcome = {"ok": False, "error": str(error), "code": error.code}
+                if batch:
+                    # No partial setup, preferences, events or failure counters
+                    # escape a failed private transaction.
+                    body = original_body
+        if not batch or outcome["ok"]:
+            body["files"] = _capture(home)
+        # Repacking at the same revision tells us whether any state changed.
+        changed = pack(body, expected, snapshot["revision"])["sha256"] != snapshot["sha256"]
+        candidate = pack(body, expected, snapshot["revision"] + int(changed))
+        project_id = (result or {}).get("project_id") if isinstance(result, dict) else None
+        project_id = project_id or command.get("project_id")
+        view = (
+            journal_view(app, project_id, body["projects"], candidate["revision"])
+            if project_id in body["projects"]
+            else None
+        )
+    return {
+        **outcome,
+        "result": result,
+        "operation_id": operation_id,
+        "replayed": bool(previous),
+        "base": reference(snapshot),
+        "snapshot": candidate,
+        "markdown": markdown(candidate),
+        "changed": changed,
+        "saved": False,
+        "project_journal": view,
+    }

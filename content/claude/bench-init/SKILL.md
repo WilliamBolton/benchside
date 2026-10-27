@@ -1,45 +1,28 @@
 ---
 name: bench-init
-description: >
-  Initialize the current directory as a benchside project: sets up project
-  identity, session hooks, and the /pi supervisor skill. Use when the user
-  wants to set up benchside, start using /pi here, or asks to "init bench".
-allowed-tools: "Bash(bench *)"
+description: Set up Benchside in Claude Code, choose where research records live, and make all seven scientific roles available. Use when the researcher asks to initialize Benchside in a local project.
 ---
 
-# /bench-init — set up benchside in this project
+# Set up Benchside
 
-You are initializing benchside for the scientist's current project directory.
+Read the installed sibling `../benchside/SKILL.md` and follow its onboarding
+reference. Ask where the researcher wants records stored: a durable local folder,
+private native documents, or a compatible installed cloud connector. Do not choose
+local storage merely because this is Claude Code. The agent runs setup commands;
+the researcher need not use a terminal or provide a model API key.
 
-## Before doing anything
+The shared Benchside skill contains all seven roles and uses `bench app` for a
+source installation. Prefer this route for projects also used from another agent.
+List existing projects in the chosen store and reuse the selected project ID.
 
-1. Run `bench project` and show them what project id this directory resolves
-   to. If it looks wrong (a generic directory name like `work` or `analysis`),
-   suggest they name it: the id can be pinned in `.bench/config.yaml`.
-2. Tell them, plainly, what `bench init` will write:
-   - `.bench/config.yaml` — the project's identity
-   - `.claude/settings.json` — two session hooks (SessionStart injects the
-     project's memory into new sessions; SessionEnd archives the transcript
-     locally). Both are tagged and idempotent.
-   - `.claude/skills/pi/SKILL.md` — the /pi supervisor persona
-   And the data guarantee: **everything stays on this machine** under
-   `~/.local/share/benchside/`. Nothing is ever shared without an explicit, revocable
-   `bench share grant`, and `bench share preview` always shows the exact
-   bytes before anything leaves.
+If the researcher specifically wants the legacy per-project slash commands and
+Claude Code lifecycle hooks, explain that `bench init --yes` writes project identity
+in `.bench/config.yaml`, role skills in `.claude/skills`, and tagged session hooks in
+`.claude/settings.json`. SessionStart restores legacy CLI recall; SessionEnd archives
+the transcript locally. Follow their request before enabling these hooks. This is
+optional; the shared skill records without hooks and works with native memory too.
+Legacy CLI journals and app project IDs are separate; do not imply automatic migration.
 
-## Ask, then act
-
-Ask for their go-ahead. If they agree, run:
-
-```bash
-bench init --yes
-```
-
-Show them the output. If a `.bench/config.yaml` already exists, init is
-idempotent — say so rather than warning about it.
-
-## Afterwards
-
-Tell them /pi is now available in this project (they may need to start a new
-Claude session for the skill and hooks to load), and that a sitting begins by
-just invoking `/pi`.
+Optional reporting always requires separate consent, exact preview and approval.
+The shared onboarding flow also offers optional discipline/career-stage categories
+and a separate choice to include them in reviewed usage reports.

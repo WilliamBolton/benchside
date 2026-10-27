@@ -1,11 +1,4 @@
-"""bench init: the installer for a research project.
-
-Everything an external scientist needs, one command: project identity pinned
-in .bench/config.yaml, lifecycle hooks registered (with consent — Claude Code
-executes project hooks without prompting, so the consent moment is ours), and
-the /pi skill compiled into the project's .claude/skills/ where Claude Code
-auto-discovers it.
-"""
+"""Install shared agent instructions and optional legacy Claude Code project hooks."""
 
 import json
 import sys
@@ -22,38 +15,55 @@ from benchside.util.di import Scope
 _TAG = "_benchside"
 _HOOK_TIMEOUTS = {"SessionStart": 10, "SessionEnd": 15}
 
-LOCAL_DATA_NOTE = """\
-Your data stays local. Sittings, hypotheses, critiques, and transcripts are
-written only to ~/.local/share/benchside/ on this machine. Nothing is shared unless you
-explicitly run `bench share grant` — and `bench share preview` always
-shows you the exact bytes before anything leaves."""
+
+def _skill_directory(args, root: Path) -> Path:
+    if args.skills_dir:
+        return Path(args.skills_dir).expanduser().resolve()
+    return root / (".claude" if args.agent == "claude" else ".agents") / "skills"
+
+
+def _configure_storage(args):
+    if args.storage:
+        from benchside.config import configure_local_storage
+
+        configure_local_storage(args.storage)
+
+
+def _install_app_skill(target: Path):
+    from benchside.application.packaging import build_agent_skill
+    from benchside.config import resolve_content_root
+
+    if (resolve_content_root() / "app").is_dir():
+        build_agent_skill(target / "benchside")
 
 
 def cmd_init(args) -> int:
     project_dir = Path.cwd()
     project_id = runtime.resolve_project(args.project)
-
+    target = _skill_directory(args, project_dir)
+    hooks = args.agent == "claude"
+    details = " and register Claude Code session hooks" if hooks else ""
     if not args.yes and not _confirm(
-        "bench init will write .bench/config.yaml, register two session hooks in "
-        ".claude/settings.json, and compile the /pi skill into .claude/skills/. Proceed?"
+        f"Create .bench/config.yaml, install Benchside into {target}{details}?"
     ):
         print("init cancelled; nothing written")
         return 1
-
+    _configure_storage(args)
     config = project_dir / ".bench" / "config.yaml"
     config.parent.mkdir(parents=True, exist_ok=True)
     if not config.is_file():
         config.write_text(f"project: {project_id.root}\n", encoding="utf-8")
-
-    _register_hooks(project_dir / ".claude" / "settings.json")
-    _compile_skills(project_dir / ".claude" / "skills")
-
+    if hooks:
+        _register_hooks(project_dir / ".claude" / "settings.json")
+        _compile_skills(target)
+    _install_app_skill(target)
     print(f"initialized benchside project '{project_id.root}'")
-    print("  .bench/config.yaml — project identity")
-    print("  .claude/settings.json — SessionStart/SessionEnd hooks (tagged, idempotent)")
-    print("  .claude/skills/pi/SKILL.md — the /pi supervisor persona")
-    print()
-    print(LOCAL_DATA_NOTE)
+    print(f"  skills: {target}")
+    print(f"  local record directory: {runtime.current_paths().home}")
+    print("Optional submissions require separate consent and an approved preview.")
+    print(
+        "Ask Benchside to choose storage and select or create a research project before recording."
+    )
     return 0
 
 
@@ -102,21 +112,31 @@ def _compile_skills(target_dir: Path) -> None:
             writer=FileSkillWriter(target_dir),
         )
         service.compile()
+    import shutil
+
+    from benchside.config import resolve_content_root
+
+    sharing_skill = resolve_content_root() / "claude" / "bench-share"
+    if sharing_skill.is_dir():  # Custom authoring roots may contain only personas.
+        shutil.copytree(sharing_skill, target_dir / "bench-share", dirs_exist_ok=True)
 
 
 def cmd_setup(args) -> int:
-    """One-time machine setup: install the user-level /bench-init skill.
-
-    This is the only skill that lives at user level — it must exist BEFORE any
-    project is inited, because it is how init happens from inside Claude.
-    Everything else is per-project, installed by bench init.
-    """
+    """Install agent instructions without assuming a particular model or storage provider."""
     from benchside.config import resolve_content_root
 
-    source = resolve_content_root() / "claude" / "bench-init" / "SKILL.md"
-    target = Path.home() / ".claude" / "skills" / "bench-init" / "SKILL.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"installed /bench-init skill -> {target}")
-    print("In any project directory, a Claude session can now run /bench-init.")
+    _configure_storage(args)
+    target = _skill_directory(args, Path.home())
+    _install_app_skill(target)
+    if args.agent == "claude":
+        source = resolve_content_root() / "claude" / "bench-init" / "SKILL.md"
+        destination = target / "bench-init" / "SKILL.md"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"installed /bench-init skill -> {destination}")
+    print(f"Benchside instructions installed in {target}.")
+    print("Ask your agent to set up Benchside; it will ask where to store your records.")
+    print(
+        "Other agents can read benchside/SKILL.md explicitly if they do not discover skills here."
+    )
     return 0
