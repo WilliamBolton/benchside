@@ -107,7 +107,9 @@ def test_cached_code_changes_are_rejected(packaged_runtime, attack):
     else:
         module.unlink()
         module.symlink_to(temporary / "external.py")
-    with pytest.raises(RuntimeError, match="integrity|links"):
+    # Linux symlinks expose writable mode bits, so the permission check can
+    # reject them before the link-type check. Both must stop cache reuse.
+    with pytest.raises(RuntimeError, match="integrity|links|ownership or permissions"):
         entry.bootstrap()
     assert len(calls) == 1
 
