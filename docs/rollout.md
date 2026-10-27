@@ -7,9 +7,9 @@ arrives. The rollout is informal; no fixed cohort or required follow-up session.
 ## Current verification
 
 See the [27 October release review](release-review-2026-10-27.md) for the current
-0.1.2 review package, executable checks, independent review findings and remaining
+0.1.3 review package, executable checks, independent review findings and remaining
 release gates. Installed 0.1.1 passed fresh-chat native restoration and guarded
-save/readback in both apps; the 0.1.2 fixes require a further installed update check.
+save/readback in both apps; the 0.1.3 fixes require a further installed update check.
 Coverage includes native
 memory cases covering all seven roles, project isolation, consent/draft recovery,
 ambiguous saves, operation replay and invalid state. The companion
@@ -130,11 +130,15 @@ are derived views. A single guarded state write avoids partially saving those
 dependent records. Checksums detect damage; operation IDs prevent committed
 actions being repeated after ambiguous saves. The compressed state is private
 research data, not encryption. State documents are bounded at 190,000 bytes and
-8 MiB uncompressed. Full replay responses have a bounded cache, while operation
-IDs and hashes persist. Ordinary writes leave capacity for consent withdrawal;
+8 MiB uncompressed. Replay responses are bounded, and the operation ID/hash index
+is limited to 128 entries or 64 KiB. Checkpoint generations fence expired requests
+so forgetting an old ID cannot silently replay its action. Saved submission
+receipts remain available separately. Ordinary writes leave capacity for consent withdrawal;
 submission receipt space is checked before networking. A full notebook preserves
 scientific history and needs archival/larger storage. Update all apps sharing a
-notebook to 0.1.2 together; 0.1.1 cannot read its new provenance/compacted receipts.
+notebook to 0.1.3 before new activity selection records or a v2 replay checkpoint;
+0.1.2 cannot read the new sample methods or v2 snapshots. Preserve refused state
+and update the runtime; never remove method fields or downgrade its schema.
 
 On 22 October, native ChatGPT Page creation, read, guarded update and readback
 were verified with synthetic records. Will independently opened a new ChatGPT
@@ -237,7 +241,7 @@ Official sources checked during implementation:
 
 1. Run the Python tests, linter, compiled-skill check and packaged-runtime smoke
    test. Run the companion collector's type check and Worker tests.
-   The package check is `python scripts/smoke_release.py dist/benchside-claude-0.1.2.zip`
+   The package check is `python scripts/smoke_release.py dist/benchside-claude-0.1.3.zip`
    after building the release; repeat it for the two plugin ZIPs. It exercises
    local continuity and simulated native transport, not live cloud persistence.
    Validate the Claude manifest with `claude plugin validate plugins/benchside`.
@@ -271,7 +275,16 @@ Official sources checked during implementation:
    session access, scope boundaries, private state restoration and honest evidence
    labels. Keep the catalog empty until a study definition and its data-use/retention
    process are reviewed. Configure native scheduled checks only on explicit request;
-   a scheduled run must leave submissions awaiting researcher review.
+   a weekly check inventories the previous complete Monday–Sunday UTC week from
+   the selected sources. Filter for research relevance using available metadata
+   before selection, including work without a Benchside role; report missing
+   date/relevance information or source access. Pass the status sampling window's
+   week when creating the sample so a Monday rollover cannot relabel an inventory.
+   Automatic selection includes all relevant eligible conversations up to 20,
+   or randomly selects 20 above that cap. A researcher may instead explicitly
+   choose up to 20; record the method. Both share one fixed batch per observed
+   week, so switching methods cannot redraw it. A scheduled run must leave
+   submissions awaiting researcher review.
 
 ## Collecting and interpreting data
 
@@ -303,8 +316,23 @@ without joining individual submissions across channels.
 
 Survey answers are grouped by study version and definition digest. Activity
 reports use the highest revision of each independent weekly batch, distinguish
-model inference from researcher reports, and show coverage only for submitted
+model inference from researcher reports, separate selection methods, and show coverage only for submitted
 batches. They do not estimate a population or establish classifier accuracy.
+For new samples, the activity `week` is the previous complete observed UTC week,
+not the submission week. `weekly-random-max20-v1` includes all relevant eligible
+sessions up to 20 or randomly selects 20 from a larger supplied inventory.
+`weekly-user-selected-max20-v1` records an explicit chosen set; its eligible count
+means that set only, never all accessible research or a population denominator.
+The report's `activity_by_sampling` separates both methods and the preserved
+`weekly-random-10pct-max5-v1` legacy rule. Older saved samples may have been fixed before their
+week ended and are preserved without redrawing or changing counts. They can be
+resumed after an update, so a newer preview's client version does not establish
+complete-week coverage. Treat those historical batches as their original supplied
+inventory, and do not assume a complete research-activity denominator. The host
+filters relevance and dates; the engine cannot independently validate that from IDs.
+The matching activity receiver validators/tests are prepared but unexecuted;
+deploy and verify compatibility before new activity submissions. The other
+submission contracts remain unchanged.
 
 Only opt-in installations are counted. Reinstallation or multiple apps may
 represent the same person more than once. Use feedback and the examples people

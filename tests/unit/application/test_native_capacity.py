@@ -31,7 +31,7 @@ class Notebook:
                 "action": "native.run",
                 "document": self.document,
                 "workspace_id": native.unpack(self.document)[0]["workspace_id"],
-                "operation_id": operation_id or uuid.uuid4().hex,
+                **({"operation_id": operation_id} if operation_id is not None else {}),
                 "request": command,
                 **({"project_document": project} if project else {}),
             }

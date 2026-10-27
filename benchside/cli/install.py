@@ -77,6 +77,9 @@ def cmd_init(args) -> int:
     else:
         if args.agent == "claude":
             _remove_hooks(project_dir / ".claude" / "settings.json")
+            from benchside.infrastructure.session_context import clear_project_sessions
+
+            clear_project_sessions(runtime.current_paths(), runtime.resolve_project(cwd=project_dir))
         _install_app_skill(target)
     print(f"initialized benchside project '{project_id.root}'")
     print(f"  skills: {target}")

@@ -13,9 +13,15 @@ reviewed sharing of findings. All start off, and the original problem-sharing,
 feedback and usage settings remain independent. Scientific assistance remains
 available when every optional choice is off.
 
-The researcher selects accessible research projects or conversations. Benchside
-samples 10% of eligible sessions, rounded up and capped at five per UTC week,
-then the host assistant classifies only those sessions. This works without using
+The researcher selects accessible research projects or conversations. The host
+first inventories completed, research-relevant conversations from the previous
+complete Monday–Sunday UTC week within those sources, excluding unrelated chats
+using available metadata. Automatic selection includes all eligible conversations
+up to 20, or randomly selects 20 when there are more. Alternatively, researchers
+can explicitly choose 1–20 relevant conversations from the same sources and
+completed week. Both methods share one fixed batch and one cap of 20 per observed
+week; a researcher cannot switch methods to redraw it. The host assistant
+classifies only those sessions. This works without using
 one of the seven research roles. The assistant prepares a weekly review showing
 activity, obstacles, verification and reported usefulness. Researchers can
 correct or exclude findings before approving a submission. No logs, research
@@ -47,6 +53,15 @@ all-chat access or background execution. Where these tools are absent, work with
 explicitly supplied sessions or report the missing capability. Never claim to
 have observed inaccessible history. Native scheduling must be explicitly requested
 and supported by that particular account; no schedule is created by installation.
+Choose a weekly check after the observed week ends: Monday's check covers the
+preceding Monday–Sunday, and later checks that week cover that same completed
+window. `metascience.status` exposes inclusive `starts_at`, exclusive `ends_before`
+and `week` in `sampling_window`. The host passes `week` to `metascience.sample`;
+an incomplete, future or stale window is rejected rather than silently relabelled.
+Existing calls omitting `week` default to the most recent completed week.
+Eligibility by research relevance and completion date is a host responsibility:
+the engine sees only IDs and cannot verify unseen timestamps or conversation
+contents. Missing metadata/access must be reported or clarified, never invented.
 
 ## Contracts and safeguards
 
@@ -56,7 +71,7 @@ and supported by that particular account; no schedule is created by installation
   version and definition digest, and selected option IDs. The server requires an
   active published definition. The exact approved definition is bound by its hash.
 - `POST /v1/activity`: `benchside.activity.v1`, independent weekly batch ID and
-  revision, sampling coverage and up to five categorical findings. Field-level
+  revision, explicit selection method, coverage and up to 20 categorical findings. Field-level
   evidence distinguishes model inference from researcher reports. No stable
   participant ID exists across batches or in other channels.
 - The original `/v1/gaps` payload is unchanged. Feedback and usage contracts
@@ -64,10 +79,12 @@ and supported by that particular account; no schedule is created by installation
 - Revoke any choice to stop future processing/sends. Scope changes and regranting
   consent invalidate pending drafts. Edited activity records invalidate prior
   previews. No review happens automatically, including in scheduled tasks.
-- Narrowing sources retires the current week's sample; older samples containing
+- Narrowing sources retires the sample for the latest completed week, plus any
+  legacy current-week sample; older samples containing
   removed sources are retired too. A retired week cannot be resumed or sampled
   again, even after reselecting sources. The adapter gives the next eligible
-  Monday; select approved sources and continue in that later UTC week. Retirement
+  collection Monday; select approved sources and continue after the next observed
+  week has finished. Retirement
   never changes a submitted batch's counts or draws replacement sessions.
 - Withdrawing analysis clears source selections, sampled conversation references,
   private classifications and unsent activity drafts. It retains source-free
@@ -77,13 +94,20 @@ and supported by that particular account; no schedule is created by installation
   is not erasure of every local trace. Submitted receipts and their exact backing
   category payloads remain for audit/removal requests; pending surveys are
   independent. Native replay responses are also compacted on analysis or scope
-  changes, preserving operation IDs and hashes without old source/session
-  references. Earlier host document versions or backups may retain older data.
+  changes, removing old source/session references from cached responses. Native
+  operation IDs/hashes have a bounded replay window (128 entries or 64 KiB);
+  checkpoint generations prevent expired requests from silently executing again.
+  Saved submission receipts remain separate evidence. Earlier host document
+  versions or backups may retain older data.
 - Repeated previews prune superseded drafts that have no receipt. Current review
   drafts and receipt-backed payloads remain. If those retained records fill the
   state limit, preserve and archive them before preparing more submissions;
   withdrawing consent remains available.
 - Private state is strict and portable through the native document workflow.
+  Update every app sharing a notebook to 0.1.3 before creating new selection
+  records or a v2 replay checkpoint; 0.1.2 cannot interpret the new sample methods
+  or v2 snapshots. Preserve the notebook and update the runtime if it refuses an
+  unfamiliar state; never strip method fields or downgrade the schema to reopen it.
   Native size limits still apply. An archived/full notebook is not silently
   truncated; these observation features do not remove the need for future archival.
 
@@ -112,13 +136,35 @@ new submission destination or request new privileges.
 ## Analysis and interpretation
 
 The report adds survey answer counts by study/version/definition and activity
-counts by category and evidence basis. Activity coverage reports eligible,
+counts by category, evidence basis and selection method. Activity coverage reports eligible,
 selected and actually shared counts **only for submitted batches**. It cannot
 measure declined/unsubmitted batches, inaccessible history, exact people or all
 research activity. Random selection inside a self-selected accessible sample
 does not make findings population-representative. Edits and optional submission
 introduce further selection bias. Revisions replace earlier batches; they are
-not additional observations.
+not additional observations. `activity_by_sampling` keeps all three methods
+separate; pooled totals describe submitted data only. A researcher-chosen batch's
+eligible count is exactly the supplied set, not an estimate of accessible sessions
+or a population-frequency denominator. No participant joins are added.
+
+For new samples, `week` identifies the observed Monday–Sunday UTC interval,
+not the week in which the assistant classified or submitted it. New methods are
+`weekly-random-max20-v1` (`selected = min(eligible, 20)`) and
+`weekly-user-selected-max20-v1` (`eligible = selected`, between 1 and 20).
+The original `weekly-random-10pct-max5-v1` remains accepted with its original
+round-up and five-session cap. Private samples without a method field restore
+as that legacy method. The earlier implementation could
+freeze an inventory during the current week. Those saved batches and receipts
+retain their original IDs, counts and selections; an update never redraws or
+relabels them. They can still be resumed, and a later preview can carry a newer
+Benchside version, so neither the sampling tag nor client version alone proves
+a historical batch covered a complete week. Interpret retained legacy batches
+as the accessible inventory originally supplied; do not combine them as though
+they were known complete-week denominators. Matching activity-only receiver
+validation and synthetic tests are prepared for the new tags, but receiver testing
+and deployment remain outstanding. An older receiver rejects the new tags;
+test and deploy the matching receiver before enabling new activity submissions.
+Gap, feedback, usage and survey contracts are unchanged.
 
 Use the synthetic cases in `evals/metascience.json` for host acceptance. Inspect
 the model's decisions, scope adherence, treatment of prompt injection in logs,

@@ -73,16 +73,18 @@ class JsonlJournal:
         if not path.exists():
             return []
         envelopes = []
-        for raw in path.read_text(encoding="utf-8").splitlines():
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             raw = raw.strip()
             if not raw:
                 continue
             try:
                 record = json.loads(raw)
+                if not isinstance(record, dict):
+                    raise TypeError("Journal envelope must be an object")
                 record.setdefault("session", None)
                 envelopes.append(record)
-            except json.JSONDecodeError:
-                continue
+            except (ValueError, TypeError, AttributeError) as err:
+                self._log_unreadable(path, number, err)
         return envelopes
 
     def projects(self) -> Iterable[ProjectId]:
@@ -104,7 +106,16 @@ class JsonlJournal:
                     continue
                 try:
                     record = json.loads(raw)
+                    if not isinstance(record, dict):
+                        raise TypeError("Journal envelope must be an object")
                     event_type = Event.resolve(record["type"])
                     yield event_type.model_validate(record["data"])
-                except (json.JSONDecodeError, KeyError, ValueError) as err:
-                    logger.warning("Skipping unreadable journal line %s:%d (%s)", path, number, err)
+                except (KeyError, ValueError, TypeError, AttributeError) as err:
+                    self._log_unreadable(path, number, err)
+
+    @staticmethod
+    def _log_unreadable(path: Path, number: int, error: Exception) -> None:
+        # Validation errors can contain research text. Log location and category only.
+        logger.warning(
+            "Skipping unreadable journal line %s:%d (%s)", path, number, type(error).__name__
+        )

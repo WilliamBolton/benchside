@@ -15,6 +15,8 @@ from urllib.request import Request
 from benchside import __version__
 from benchside.application.submission_failures import record_submission_failure
 from benchside.domain.export.model.metascience import (
+    MANUAL_SAMPLING,
+    RANDOM_SAMPLING,
     ActivityObservation,
     ActivityPayload,
     Candidate,
@@ -99,12 +101,25 @@ class Metascience:
 
     @staticmethod
     def _retirement_message(week):
-        next_week = (date.fromisoformat(week) + timedelta(days=7)).isoformat()
+        next_week = date.fromisoformat(week) + timedelta(days=7)
+        available = next_week + timedelta(days=7)
         return (
             f"The sample for {week} was retired after an analysis or source change. "
             "It cannot be resumed or re-sampled. Select approved sources and sample "
-            f"a later UTC week, starting {next_week}."
+            f"a later completed UTC week, starting {next_week} (available from {available})."
         )
+
+    def _sampling_week(self):
+        # Wait until Sunday has ended; an early-week run must not freeze a partial frame.
+        return self.today - timedelta(days=self.today.weekday() + 7)
+
+    def _sampling_window(self):
+        week = self._sampling_week()
+        return {
+            "week": week.isoformat(),
+            "starts_at": f"{week}T00:00:00Z",
+            "ends_before": f"{week + timedelta(days=7)}T00:00:00Z",
+        }
 
     def _retire_samples(self, weeks):
         """Erase private selections; retain a marker so consent changes cannot redraw a week."""
@@ -116,6 +131,7 @@ class Metascience:
                 id=previous.id,
                 inventory_sha256=digest(["benchside.retired-sample", week]),
                 eligible=0,
+                sampling=previous.sampling,
                 selected={},
                 revision=previous.revision,
             )
@@ -158,7 +174,8 @@ class Metascience:
             "pending_drafts": [
                 d for d in self.state.latest.values() if d not in self.state.receipts
             ],
-            "limits": {"invitation_days": 7, "sample_percent": 10, "sessions_per_week": 5},
+            "limits": {"invitation_days": 7, "sessions_per_week": 20},
+            "sampling_window": self._sampling_window(),
         }
 
     def consent(self, choice, enabled):
@@ -197,12 +214,16 @@ class Metascience:
         if selected != self.state.scopes:
             # Changing scope invalidates every pending observation approval.
             grants = {**self.state.grants, "analysis": uuid.uuid4().hex}
-            current_week = (self.today - timedelta(days=self.today.weekday())).isoformat()
+            # Also retire a legacy current-week sample when upgrading mid-week.
+            recent_weeks = {
+                self._sampling_week().isoformat(),
+                (self._sampling_week() + timedelta(days=7)).isoformat(),
+            }
             narrowed = any(scope not in selected for scope in self.state.scopes)
             affected = [
                 week
                 for week, sample in self.state.samples.items()
-                if (narrowed and week == current_week)
+                if (narrowed and week in recent_weeks)
                 or any(c.scope not in selected for c in sample.selected.values())
             ]
             self._save(scopes=selected, grants=grants, **self._retire_samples(affected))
@@ -307,8 +328,19 @@ class Metascience:
         payload.check_study(study)
         return self._preview("surveys", key, payload, grants)
 
-    def sample(self, candidates):
+    def sample(self, candidates, *, week=None, selection=None):
         self._require("analysis")
+        completed_week = self._sampling_week().isoformat()
+        if week is not None and week != completed_week:
+            raise ValidationError(
+                f"Supply the inventory for completed UTC week {completed_week}; "
+                "refresh metascience.status before sampling. Current, future and stale "
+                "inventory windows cannot create a new sample."
+            )
+        week = completed_week
+        methods = {"random": RANDOM_SAMPLING, "user_selected": MANUAL_SAMPLING}
+        if selection is not None and (not isinstance(selection, str) or selection not in methods):
+            raise ValidationError("Choose random or user_selected for activity selection")
         if not self.state.scopes:
             raise ValidationError("Select accessible research projects or conversations first")
         if not isinstance(candidates, list) or len(candidates) > 500:
@@ -320,7 +352,6 @@ class Metascience:
         keyed = {digest([c.scope.host, c.session_ref]): c for c in items}
         if len(keyed) != len(items):
             raise ValidationError("A session was listed more than once")
-        week = (self.today - timedelta(days=self.today.weekday())).isoformat()
         inventory = digest(sorted(keyed))
         previous = self.state.samples.get(week)
         if previous:
@@ -329,19 +360,34 @@ class Metascience:
             if any(c.scope not in self.state.scopes for c in previous.selected.values()):
                 self._save(**self._retire_samples([week]))
                 raise ValidationError(self._retirement_message(week))
+            if selection is not None and methods[selection] != previous.sampling:
+                raise ValidationError(
+                    f"The {week} selection method is fixed; use metascience.batch to resume it. "
+                    "Both methods share one weekly cap; do not create a second batch."
+                )
             if inventory != previous.inventory_sha256:
                 raise ValidationError(
-                    "This week's sample is fixed; use metascience.batch to resume it"
+                    f"The {week} sample is fixed; use metascience.batch to resume it"
                 )
             return self.batch(week)
+        sampling = methods[selection or "random"]
+        if sampling == MANUAL_SAMPLING:
+            if not 1 <= len(keyed) <= 20:
+                raise ValidationError("Choose between 1 and 20 completed research conversations")
+            if any(key in self.state.seen for key in keyed):
+                raise ValidationError(
+                    "A conversation was already selected in a previous week; "
+                    "choose only previously unanalysed conversations"
+                )
         eligible = {k: c for k, c in keyed.items() if k not in self.state.seen}
         # A fresh random seed is private; sorting hashes makes retries/order independent.
         ranked = sorted(eligible, key=lambda k: digest([self.state.seed, week, k]))
-        chosen = ranked[: min(5, (len(eligible) + 9) // 10)]
+        chosen = ranked[:20]
         sample = Sample(
             id=uuid.uuid4().hex,
             inventory_sha256=inventory,
             eligible=len(eligible),
+            sampling=sampling,
             selected={uuid.uuid4().hex: eligible[k] for k in chosen},
         )
         self._save(samples={**self.state.samples, week: sample}, seen=[*self.state.seen, *chosen])
@@ -400,6 +446,7 @@ class Metascience:
             week=week,
             eligible=sample.eligible,
             selected=len(sample.selected),
+            sampling=sample.sampling,
             observations=observations,
         )
         # An identical repeat preview uses the existing bytes and approval token.
@@ -474,7 +521,11 @@ class Metascience:
             case "metascience.survey":
                 return self.survey(request["study_key"], request["answers"])
             case "metascience.sample":
-                return self.sample(request["candidates"])
+                return self.sample(
+                    request["candidates"],
+                    week=request.get("week"),
+                    selection=request.get("selection"),
+                )
             case "metascience.batch":
                 return self.batch(request["week"])
             case "metascience.record":

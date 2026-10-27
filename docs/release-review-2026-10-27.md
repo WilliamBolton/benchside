@@ -1,13 +1,15 @@
 # Review preparation — 27 October 2026
 
-This is a review build, version 0.1.2. Neither repository is merged or deployed by
-this preparation. All endpoint tests use synthetic records and isolated storage.
+This report records the earlier 0.1.2 review and the 0.1.3 follow-up below.
+Historical endpoint tests used synthetic records and isolated storage; the current
+review does not deploy or exercise the receiver.
 The paper, workshop evaluation and graph output directories are outside the PR.
 
 ## Review map
 
 The Benchside PR includes the existing session-stamping commit from Rory's PR #4,
-preserving its authorship. Coordinate that dependency before merging. The new
+preserving its authorship. The follow-up ports the session safety fixes to PR #4
+before merging that dependency; no message to its author is required. The new
 client and receiver changes are reviewed together against the same JSON contracts.
 
 Draft PRs: [Benchside #5](https://github.com/science-works/benchside/pull/5)
@@ -36,8 +38,9 @@ read-only Claude Code review used the local receiver checkout at `8aad0f5`, and
 a separate Claude Code follow-up examined client `ca762ae`. Neither executed
 code. Proposed defects were checked against the implementation and test results.
 
-- Native memory bounds cached response bodies while retaining operation IDs and
-  request hashes; submissions check capacity before networking, and ordinary
+- Native memory bounds cached response bodies. Version 0.1.2 retained all operation
+  IDs and request hashes; 0.1.3 bounds that index with generation checkpoints that
+  refuse expired retries before execution. Submissions check capacity before networking, and ordinary
   writes leave room for consent withdrawal. Emergency control-history compaction
   preserves scientific records and submitted receipts. A physically full legacy
   notebook can still need larger storage; no guarantee of infinite memory is made.
@@ -75,7 +78,7 @@ The claimed Linux cache-install blocker was contradicted by actual Linux 3.11 an
 3.14 CI, including cold package execution. Public write access, an empty study
 catalog and separately gated staging deployment remain explicit design choices.
 
-## Verification
+## Earlier 0.1.2 verification
 
 - All 327 Python tests passed on Python 3.11 and Python 3.14.
 - Lint, all seven compiled-role checks, Codex/portable manifest, Claude manifest
@@ -155,21 +158,23 @@ These are installed **0.1.1** results; they do not establish installed 0.1.2 beh
 ## Host and release gates
 
 The [23 October report](acceptance-2026-10-23.md) remains the evidence for the
-broader seven-role installed tests. The new 0.1.2 ZIPs contain review fixes and need
+broader seven-role installed tests. The new 0.1.3 ZIPs contain review fixes and need
 a further installed update check. Package validation alone is not app installation.
 
 Cloudflare access checks confirmed an active token and a successful signed HEAD
-request to the existing EU `benchside-gaps` bucket. Bucket-management requests were
-not authorized, and Worker-edit permission is unconfirmed. The signed-in dashboard
-shows only Will's own new account, not the Science Works account. API-token access
-does not establish dashboard membership. The original production gaps receiver
-already exists; separate staging storage is still needed for synthetic testing of
-the new routes. No production objects were read or written.
+request to the existing EU `benchside-gaps` bucket. After accepting the Science
+Works invitation, the dashboard confirmed Individual Workers Editor access limited
+to the existing `benchside-ingest` Worker. That permits editing/deploying that
+Worker, but does not grant creation of other Workers or R2 bucket management;
+the EU bucket object view remained inaccessible. The original production gaps
+receiver already exists. Additional access/setup for the new routes is pending,
+and the user has deferred receiver and live analysis testing. No production
+objects were read or written.
 
 Before outreach:
 
-1. Install the 0.1.2 review update and repeat native resumption in both apps.
-2. Repeat shared Google memory after both installed apps are updated to 0.1.2;
+1. Install the 0.1.3 review update and repeat native resumption in both apps.
+2. Repeat shared Google memory after both installed apps are updated to 0.1.3;
    preserve the successful 0.1.1 continuity result as separate evidence.
 3. Provision Science Works staging after access is granted, deploy the receiver
    there and obtain real receipts from Claude and ChatGPT. Diagnose any gateway
@@ -183,3 +188,59 @@ Remaining limits: Claude setup latency, broader scientific quality evaluation,
 host-dependent sharing metadata and eventual native-notebook archival. Nothing
 here establishes cross-account automatic synchronization or background access to
 all research conversations.
+
+## 0.1.3 follow-up to Claude's eleven findings
+
+This follow-up addresses the review of client `4ef0eaf`, session PR #4 `6e8e444`
+and receiver `6f18f2a`. Will has requested pushed updates and review comments,
+with **no merges**. The receiver and installed-app checks above are historical;
+this follow-up uses synthetic client records and does not deploy anything.
+
+| Finding | Problem and disposition |
+| --- | --- |
+| 1 | Native replay IDs/hashes grew without bound. The index now has a 128-receipt / 64 KiB limit. Generation checkpoints reject expired requests before execution, preserving scientific history and durable submission receipts. |
+| 2 | Crashed registrations could mislabel or block later writes. The anonymous fallback expires after 24 hours without explicit activity; ended pointers remain available for explicit resumption. A targeted recovery command preserves journals. Removing legacy hooks clears that project's registrations. |
+| 3 | Cross-project SessionEnd cleared the wrong registration. Cleanup now covers the hook's origin project and its pointer project. |
+| 4 | PR #4 alone used last-started-session identity and could adopt another conversation's pointer. A separate fix branch ports the relevant identity, lifecycle and journal fixes before that PR is merged. The original commit and authorship remain intact. |
+| 5 | An early-week sample excluded conversations later in that week. New selection uses the previous complete UTC week. Will additionally requested a cap of 20 instead of 10%, with automatic random selection from relevant research conversations or explicit user selection. Methods are labelled and reported separately; existing legacy samples keep their meaning. |
+| 6 | Non-object journal lines crashed both readers. They now skip and log the line location/error category, preserve valid records and never rewrite the source journal. |
+| 7 | Lifecycle hooks waited on the global transaction lock and could exit nonzero before their error boundary. They now dispatch through their own always-zero boundary and use narrow registration/pointer locks. |
+| 8 | Quoting recalled journal text as recorded data remains an optional suggestion awaiting Will's answer. No quoting change is included yet. |
+| 9 | Failure accounting repeated invalid storage resolution and produced a traceback. It now preserves the actionable original error; malformed profile shapes are validated too. |
+| 10 | Atomic Claude settings replacement remains an optional suggestion awaiting Will's answer. No settings-write change is included yet. |
+| 11 | The edit option described inline JSON although it reads a file. Help now explicitly requests a JSON file path. |
+
+Follow-up review also found and fixed active-session expiry: explicit activity
+refreshes only an existing registration in that project. It never recreates an
+ended session or enrolls an unrelated project. A separate regression fixes the
+Python module entry point calling command handlers before they were defined.
+
+The new activity selection tags require the matching receiver validation update.
+Gaps, feedback, usage and survey wire contracts remain unchanged. Receiver code
+and regression fixtures are prepared separately; live receipt/storage checks
+remain deferred. Automatic relevance and date filtering rely on the host's
+accessible metadata within approved sources. The engine cannot inspect unseen
+conversation history or independently establish that a conversation is research.
+
+Update all apps writing a shared notebook to 0.1.3 before creating new selection
+records or replay checkpoints. The new state uses a v2 envelope so older runtimes
+request an update. Scientific history still has a finite document capacity; this
+change does not implement notebook archival. Installed 0.1.3 acceptance and live
+staging delivery remain release gates.
+
+Follow-up verification: all 435 client tests pass on Python 3.11 and Python 3.14;
+source lint, all seven compiled-role checks, both plugin manifest validators and
+shared-skill validation pass. The PR #4 fix branch passes all 126 tests on Python
+3.14 and source lint. Separate agents reviewed the session port, replay-generation
+design and new selection/reporting behavior; the additional session and native
+compatibility findings were reproduced and fixed before pushing.
+
+All three rebuilt 0.1.3 archives pass offline extracted-runtime checks: all seven
+roles save and resume through local and native storage; batches, replay, remembered
+choices and corrupted-dependency rejection work. A separate upgrade check using
+the actual 0.1.1 and 0.1.3 archives preserves all seven projects/sittings, decisions,
+unresolved questions and participation choices in both storage modes. It made
+227 fresh-process calls with endpoints disabled, no collection requests and no
+metascience actions. The 0.1.3 wheel SHA-256 is
+`ce9781e4b5183e847be0163e75a535be20b6d13238febc8bbc82fb913b3ec12b`.
+This verifies packaged upgrades, not an installation into a live app account.

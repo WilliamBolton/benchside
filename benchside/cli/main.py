@@ -37,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     if not hasattr(args, "run"):
         parser.print_help()
         return 2
+    # Hooks own their short per-project/session locks and always-zero error
+    # boundary. They must not wait behind sharing/network transactions or fail
+    # while resolving optional storage/provenance before reaching that boundary.
+    if args.command == "hook":
+        return args.run(args)
     args.ui = UI.create()
     try:
         from benchside.infrastructure.files import file_lock
@@ -72,16 +77,16 @@ def _record_failure(command, error):
     from benchside.infrastructure.files import file_lock
     from benchside.infrastructure.journal.store import JsonlJournal
 
-    paths = runtime.current_paths()
     code = (
         "recording_unavailable"
         if isinstance(error, (OSError, StorageUnavailableError))
         else "recording_invalid"
     )
     try:
+        paths = runtime.current_paths()
         with file_lock(paths.home / ".transaction.lock"):
             ReportingService(journal=JsonlJournal(paths)).failure(code)
-    except (BenchsideError, OSError):
+    except (BenchsideError, ValueError, OSError):
         pass
 
 
@@ -138,6 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--project", default=None)
     p.add_argument("--json", action="store_true")
     p.set_defaults(run=cmd_recall)
+
+    p = sub.add_parser("session", help="recover a conversation that ended without cleanup")
+    session = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    a = session.add_parser("clear", help="retire one ended conversation, keeping its research")
+    a.add_argument("--project", default=None)
+    a.add_argument("--session", required=True, dest="session_id")
+    a.set_defaults(run=cmd_clear_session)
 
     # --- sitting management ---
     p = sub.add_parser("sitting", help="manage the current sitting: open, status, close")
@@ -261,7 +273,9 @@ def build_parser() -> argparse.ArgumentParser:
     a = share.add_parser("preview", help="the exact bytes an export would send; sends nothing")
     a.add_argument("--channel", choices=["gaps", "feedback", "usage"], default="gaps")
     a.add_argument("--only", action="append")
-    a.add_argument("--edits", help="JSON mapping observation IDs to reviewed gap text")
+    a.add_argument(
+        "--edits", help="path to a JSON file mapping observation IDs to reviewed gap objects"
+    )
     a.add_argument("--feedback-id")
     a.add_argument("--comment", help="reviewed replacement feedback comment")
     a.add_argument("--week", help="Monday of the reporting week, YYYY-MM-DD")
@@ -304,6 +318,20 @@ def cmd_project(args) -> int:
         print(json.dumps({"project_id": project_id.root}))
     else:
         args.ui.info(f"project: {project_id.root}")
+    return 0
+
+
+def cmd_clear_session(args) -> int:
+    from benchside.infrastructure.session_context import clear_session
+
+    if not args.project:
+        runtime.require_initialized()
+    project_id = runtime.resolve_project(args.project)
+    clear_session(runtime.current_paths(), project_id, args.session_id)
+    args.ui.info(
+        f"Cleared conversation '{args.session_id}' for project '{project_id.root}'; "
+        "research records and unfinished sittings are preserved."
+    )
     return 0
 
 
@@ -668,11 +696,11 @@ def cmd_hook_dispatch(args) -> int:
     return cmd_hook(args)
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
-
 def cmd_app_dispatch(args) -> int:
     from benchside.application.bridge import main as app_main
 
     return app_main()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

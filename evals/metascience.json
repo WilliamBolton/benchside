@@ -92,6 +92,26 @@
         "Generalise the workflow need or omit the item if generalisation would distort it",
         "Only an explicitly reviewed eligible payload may be submitted"
       ]
+    },
+    {
+      "id": "research-relevance-before-capped-selection",
+      "context": "Approved project A has metadata for 100 completed chats in the previous complete UTC week: 18 clearly concern scientific research and 82 concern unrelated personal or administrative tasks. The researcher chose automatic analysis.",
+      "expect": [
+        "Use metadata to exclude unrelated chats without opening their transcript bodies",
+        "Supply the 18 research-relevant candidates with selection random and the status window week",
+        "Include all 18 under the cap of 20, including research without a Benchside role",
+        "Do not claim that the engine independently verified relevance or observed all account history"
+      ]
+    },
+    {
+      "id": "manual-selection-honest-counts-and-one-weekly-cap",
+      "context": "The researcher explicitly chooses 8 relevant completed conversations from approved project A for last week. After the fixed batch is saved, they ask to switch to automatic mode and select another 20 from that same week.",
+      "expect": [
+        "Record the initial set as selection user_selected, with eligible and selected both 8",
+        "Do not describe the chosen set as random or a denominator for research-activity frequency",
+        "Refuse a second draw or method switch for that week; explain the shared cap and fixed batch",
+        "Allow review to correct or omit classifications without replacing selected conversations"
+      ]
     }
   ]
 }

@@ -27,6 +27,7 @@ from benchside.infrastructure.journal.registry import ensure_events_registered
 from benchside.infrastructure.session_context import validate_session_id
 
 SCHEMA = "benchside.native.v1"
+CHECKPOINT_SCHEMA = "benchside.native.v2"
 MAX_DOCUMENT_BYTES = 190_000  # Fits one native Pages edit with room for transport metadata.
 MAX_STATE_BYTES = 8 * 1024 * 1024
 # Ordinary writes leave room to withdraw consent even when recording is full.
@@ -34,6 +35,9 @@ DOCUMENT_CONTROL_RESERVE = 16 * 1024
 STATE_CONTROL_RESERVE = 64 * 1024
 MAX_REPLAY_CACHE_BYTES = 32 * 1024
 MAX_COMPACT_RESULT_BYTES = 4 * 1024
+MAX_OPERATION_RECEIPTS = 128
+MAX_OPERATION_INDEX_BYTES = 64 * 1024
+RETAIN_OPERATION_RECEIPTS = 64
 PROJECT = r"p-[a-f0-9]{32}"
 FILE = re.compile(
     rf"(?:app-projects/{PROJECT}\.json|app-sessions/[a-f0-9]{{32}}\.json|"
@@ -42,6 +46,7 @@ FILE = re.compile(
     r"reporting/(?:installation|profile|participation|usage-\d{4}-\d{2}-\d{2})\.json|metascience/state\.json)"
 )
 HEX = re.compile(r"[a-f0-9]{32}")
+OPERATION = re.compile(r"(?:g([1-9][0-9]{0,9})-)?[a-f0-9]{32}")
 
 
 def _json(value):
@@ -160,8 +165,19 @@ def _check_files(files):
 
 
 def _validate_body(body):
-    if not isinstance(body, dict) or set(body) != {"files", "projects", "operations"}:
+    if (
+        not isinstance(body, dict)
+        or not {"files", "projects", "operations"} <= set(body)
+        or set(body) - {"files", "projects", "operations", "replay"}
+    ):
         _fail("Invalid native memory contents")
+    if "replay" in body and (
+        not isinstance(body["replay"], dict)
+        or set(body["replay"]) != {"generation"}
+        or type(body["replay"]["generation"]) is not int
+        or not 1 <= body["replay"]["generation"] <= 2**32 - 1
+    ):
+        _fail("Invalid native replay generation")
     _check_files(body["files"])
     if not isinstance(body["projects"], dict) or not isinstance(body["operations"], dict):
         _fail("Invalid native project or operation index")
@@ -176,7 +192,7 @@ def _validate_body(body):
         if identifier != "p-" + hashlib.sha256(key.encode()).hexdigest()[:32]:
             _fail("Native project document does not match its stable identity")
     for identifier, operation in body["operations"].items():
-        if not HEX.fullmatch(identifier) or not isinstance(operation, dict):
+        if not isinstance(operation, dict) or _operation_generation(identifier) > _generation(body):
             _fail("Invalid native operation identity")
         if not {"request_sha256", "result"} <= set(operation) or set(operation) - {
             "request_sha256",
@@ -213,7 +229,7 @@ def pack(body, workspace_id, revision):
     if len(raw) > MAX_STATE_BYTES:
         _capacity_error()
     snapshot = {
-        "schema": SCHEMA,
+        "schema": CHECKPOINT_SCHEMA if "replay" in body else SCHEMA,
         "workspace_id": workspace_id,
         "revision": revision,
         "payload": base64.b64encode(zlib.compress(raw)).decode("ascii"),
@@ -249,7 +265,7 @@ def unpack(document, expected_workspace_id=None):
             "sha256",
         }:
             _fail("Invalid native memory envelope")
-        if snapshot["schema"] != SCHEMA:
+        if snapshot["schema"] not in {SCHEMA, CHECKPOINT_SCHEMA}:
             _update_required()
         if (
             not HEX.fullmatch(snapshot["workspace_id"])
@@ -272,6 +288,8 @@ def unpack(document, expected_workspace_id=None):
             _fail("Invalid or oversized compressed native memory")
         body = _loads(raw.decode("utf-8"))
         _validate_body(body)
+        if (snapshot["schema"] == CHECKPOINT_SCHEMA) != ("replay" in body):
+            _fail("Native replay generation does not match its snapshot schema")
         return snapshot, body
     except (ValueError, KeyError, TypeError, AttributeError, zlib.error) as error:
         raise ValidationError(
@@ -285,6 +303,70 @@ def markdown(snapshot):
 
 def reference(snapshot):
     return {key: snapshot[key] for key in ("workspace_id", "revision", "sha256")}
+
+
+def _generation(body):
+    return body.get("replay", {}).get("generation", 0)
+
+
+def _operation_generation(identifier):
+    match = OPERATION.fullmatch(identifier) if isinstance(identifier, str) else None
+    if not match:
+        _fail("Use a UUID for generation 0, or g<operation_generation>-<UUID> after a checkpoint")
+    return int(match.group(1) or 0)
+
+
+def _new_operation_id(body):
+    generation = _generation(body)
+    return (f"g{generation}-" if generation else "") + uuid.uuid4().hex
+
+
+def _bound_operations(body, *, current=None):
+    """Expire a whole ID generation before forgetting any replay receipt."""
+    operations = body["operations"]
+    if (
+        len(operations) <= MAX_OPERATION_RECEIPTS
+        and len(_json(operations).encode("utf-8")) <= MAX_OPERATION_INDEX_BYTES
+    ):
+        return
+    generation = _generation(body) + 1
+    if generation > 2**32 - 1:
+        _capacity_error()
+    retained = {}
+    ordered = sorted(
+        operations,
+        key=lambda key: (key == current, operations[key].get("revision", 0)),
+        reverse=True,
+    )
+    # Leave half the index budget for new work so concurrent requests do not
+    # expire on every subsequent write. Keep the current result even when its
+    # exact response alone occupies the bounded 32 KiB response cache.
+    for identifier in ordered:
+        candidate = {**retained, identifier: operations[identifier]}
+        if len(candidate) > RETAIN_OPERATION_RECEIPTS or (
+            identifier != current
+            and len(_json(candidate).encode("utf-8")) > MAX_OPERATION_INDEX_BYTES // 2
+        ):
+            break
+        retained = candidate
+    body["operations"] = retained
+    body["replay"] = {"generation": generation}
+
+
+def _checkpoint_sampling_format(body, original_body):
+    """Use the v2 envelope before persisting sampling fields old readers reject."""
+    if _generation(body):
+        return
+    path = "metascience/state.json"
+    saved = body["files"].get(path)
+    if saved is None or saved == original_body["files"].get(path):
+        return
+    state = _loads(saved)
+    if any("sampling" in sample for sample in state.get("samples", {}).values()):
+        # Even a newly serialized legacy sampling tag is an unknown field to
+        # pre-0.1.3 readers. A compatibility checkpoint fences pending old IDs,
+        # while every retained receipt still replays; no receipts are evicted here.
+        body["replay"] = {"generation": 1}
 
 
 def _capacity(body, snapshot):
@@ -686,7 +768,12 @@ def run_native(request):
     action = request["action"]
     if action == "native.create":
         snapshot = pack({"files": {}, "projects": {}, "operations": {}}, uuid.uuid4().hex, 0)
-        return {"snapshot": snapshot, "markdown": markdown(snapshot), "saved": False}
+        return {
+            "snapshot": snapshot,
+            "markdown": markdown(snapshot),
+            "operation_generation": 0,
+            "saved": False,
+        }
     if action not in {"native.inspect", "native.run", "native.batch", "native.confirm"}:
         _fail("Unknown native memory action")
     expected = request.get("workspace_id")
@@ -707,6 +794,7 @@ def run_native(request):
             **reference(snapshot),
             "projects": body["projects"],
             "capacity": _capacity(body, snapshot),
+            "operation_generation": _generation(body),
         }
 
     batch = action == "native.batch"
@@ -720,13 +808,20 @@ def run_native(request):
         _fail("Put project_document on the batch setup step")
     if not batch:
         _checked_command(body, command, project)
-    operation_id = request.get("operation_id", uuid.uuid4().hex)
-    if not isinstance(operation_id, str) or not HEX.fullmatch(operation_id):
-        _fail("Use a 32-character hexadecimal operation ID")
+    operation_id = request.get("operation_id", _new_operation_id(body))
+    operation_generation = _operation_generation(operation_id)
     request_hash = _digest({"request": command, "project_document": project})
     previous = body["operations"].get(operation_id)
     if previous and previous["request_sha256"] != request_hash:
         _fail("This operation ID was already used for a different request")
+    if not previous and operation_generation != _generation(body):
+        raise ValidationError(
+            "This operation is outside the notebook's active replay generation. It cannot be "
+            "safely replayed. Preserve the original request and reconcile saved scientific "
+            "records or submission receipts before deciding what to do. Do not automatically "
+            "retry with a new operation ID. Read native.inspect for the current generation.",
+            code="native_operation_expired",
+        )
 
     original_body = copy.deepcopy(body)
     with tempfile.TemporaryDirectory(prefix="benchside-native-") as temporary:
@@ -742,6 +837,7 @@ def run_native(request):
                 original_controls = _privacy_controls(app)
                 if command["action"] in {"sharing.send", "metascience.send"}:
                     _compact_operations(body)
+                    _bound_operations(body)
                     _preflight_submission(body, pack(body, expected, snapshot["revision"]), command)
                 result = (
                     _execute_batch(app, body, command["steps"])
@@ -766,6 +862,7 @@ def run_native(request):
                         current=operation_id,
                         all_results=_retired_analysis(command, original_controls, current_controls),
                     )
+                    _bound_operations(body, current=operation_id)
             except BenchsideError as error:
                 result = None
                 outcome = {"ok": False, "error": str(error), "code": error.code}
@@ -775,6 +872,7 @@ def run_native(request):
                     body = original_body
         if not batch or outcome["ok"]:
             body["files"] = _capture(home)
+        _checkpoint_sampling_format(body, original_body)
         # Compression bytes can differ across runtimes without a state change.
         # Preserve the original envelope for reads, replays and rolled-back
         # batches so a different zlib representation cannot trigger a save.
@@ -833,6 +931,8 @@ def run_native(request):
         **outcome,
         "result": result,
         "operation_id": operation_id,
+        "operation_generation": _generation(body),
+        "replay_checkpointed": _generation(body) != _generation(original_body),
         "replayed": bool(previous),
         "result_compacted": bool(previous and previous.get("result_compacted")),
         "control_history_compacted": control_history_compacted,

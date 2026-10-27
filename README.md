@@ -40,7 +40,7 @@ protect the validated record; the execution sandbox is disposable. Both installe
 plugins passed synthetic native saves and fresh-chat restoration on 23 October.
 Shared Google storage passed a synthetic continuation on 27 October: Claude's
 installed 0.1.1 plugin resumed the project saved by ChatGPT through Google Docs.
-The rebuilt 0.1.2 review update still needs installed-app acceptance.
+The rebuilt 0.1.3 review update still needs installed-app acceptance.
 See the [rollout checks](docs/rollout.md) before
 inviting researchers through a particular app route.
 
@@ -91,8 +91,11 @@ credentials. **Feedback and usage routes must be deployed from the companion
 The app skill also supports occasional study invitations and private analysis
 of selected research conversations, including work without a Benchside role.
 These are separate opt-in choices, with reviewed sharing as a third choice.
-Invitations are capped at one per week; analysis samples 10% of eligible accessible
-sessions, up to five per week. Only reviewed categories leave the app, with no
+Invitations are capped at one per week. Analysis covers up to 20 relevant research
+conversations from the previous complete week: automatically take all when there
+are 20 or fewer, randomly select 20 when there are more, or let the researcher
+choose up to 20. Both methods share one fixed weekly batch and are labelled and
+reported separately. Only reviewed categories leave the app, with no
 raw logs or installation/project/conversation identifiers. A centrally published
 catalog supports new surveys without reinstalling the client.
 
@@ -165,9 +168,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.1.2.zip` (standalone skill),
-`dist/benchside-plugin-0.1.2.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.1.2.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.1.3.zip` (standalone skill),
+`dist/benchside-plugin-0.1.3.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.1.3.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

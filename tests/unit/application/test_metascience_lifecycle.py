@@ -97,8 +97,8 @@ def test_narrowing_scopes_retires_week_with_one_clear_recovery(paths):
         flow.sample(CANDIDATES)
     flow.today += timedelta(days=7)
     next_batch = flow.sample(CANDIDATES)
-    assert next_batch["eligible"] == 1
-    assert next_batch["week"] == "2026-11-02"
+    assert next_batch["eligible"] == 0  # Both prior candidates were selected under the cap of 20.
+    assert next_batch["week"] == "2026-10-26"
     assert next_batch["id"] != batch["id"]
 
 

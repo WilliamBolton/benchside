@@ -219,13 +219,13 @@ def test_private_sampling_requires_scope_and_bounds_random_selection(flow):
     with pytest.raises(BenchsideError):
         flow.sample(candidates(1) * 2)
     batch = flow.sample(candidates(100))
-    assert batch["eligible"] == 100 and len(batch["selected"]) == 5
+    assert batch["eligible"] == 100 and len(batch["selected"]) == 20
     assert flow.sample(list(reversed(candidates(100)))) == batch
     with pytest.raises(BenchsideError):
         flow.sample(candidates(99))
     flow.today += timedelta(days=7)
     later = flow.sample(candidates(100))
-    assert later["eligible"] == 95
+    assert later["eligible"] == 80
     assert not {c["session_ref"] for c in batch["selected"].values()} & {
         c["session_ref"] for c in later["selected"].values()
     }
@@ -257,7 +257,7 @@ def test_same_conversation_in_two_sources_is_not_counted_twice(flow):
 
 def test_broader_observation_works_without_a_benchside_role(flow, paths):
     batch = record_batch(flow)
-    assert len(batch["records"]) == 3
+    assert len(batch["records"]) == 20
     assert all(r["benchside_role"] == "none" for r in batch["records"].values())
     assert not (paths.home / "projects").exists()
     with pytest.raises(BenchsideError):
@@ -266,7 +266,7 @@ def test_broader_observation_works_without_a_benchside_role(flow, paths):
     token = next(iter(batch["records"]))
     draft = flow.preview_activity(batch["week"], [token])
     data = json.loads(draft["payload"])
-    assert (data["eligible"], data["selected"], len(data["observations"])) == (21, 3, 1)
+    assert (data["eligible"], data["selected"], len(data["observations"])) == (21, 20, 1)
     assert "private-" not in draft["payload"] and token not in draft["payload"]
     assert not any(
         k in draft["payload"] for k in ("installation_id", "scope", "session_ref", "source_id")
@@ -418,7 +418,7 @@ def test_aggregate_report_deduplicates_revisions_without_linking_people(flow, tm
     assert report["activity_batches"] == 1
     assert report["activity_coverage"] == {
         "eligible_in_submitted_batches": 21,
-        "selected_in_submitted_batches": 3,
+        "selected_in_submitted_batches": 20,
         "reviewed_and_shared": 1,
     }
     assert report["survey_submissions"] == 1 and report["active_installations"] == 0

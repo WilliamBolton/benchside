@@ -17,16 +17,17 @@ from benchside.cli import runtime
 from benchside.infrastructure.session_context import (
     clear_session,
     register_session,
+    retire_session_pointer,
     validate_session_id,
 )
 
 
 def cmd_hook(args) -> int:
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        payload = {}
-    try:
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except json.JSONDecodeError:
+            payload = {}
         if args.event == "session-start":
             _session_start(payload)
         elif args.event == "session-end":
@@ -102,22 +103,14 @@ def _session_end(payload: dict) -> None:
     paths = runtime.current_paths()
     session_id = validate_session_id(payload.get("session_id") or "local")
 
-    pointer_path = runtime.pointer_dir(paths) / f"{session_id}.json"
-    project_root = None
-    if pointer_path.is_file():
-        try:
-            project_root = json.loads(pointer_path.read_text(encoding="utf-8")).get("project_id")
-        except (OSError, json.JSONDecodeError):
-            pass
-        # Retire: rename off the *.json namespace so it can never hijack
-        # sitting resolution, but keep it for the next session's recall.
-        pointer_path.rename(pointer_path.with_suffix(".ended"))
-
-    if project_root is None:
-        project_root = runtime.resolve_project(cwd=project_dir).root
+    origin_project = runtime.resolve_project(cwd=project_dir)
+    pointer = retire_session_pointer(paths, session_id) or {}
     from benchside.domain.shared.model.ids import ProjectId
 
-    clear_session(paths, ProjectId(project_root), session_id)
+    clear_session(paths, origin_project, session_id)
+    project_root = ProjectId(pointer.get("project_id") or origin_project.root).root
+    if project_root != origin_project.root:
+        clear_session(paths, ProjectId(project_root), session_id)
 
     transcript = payload.get("transcript_path") or ""
     if transcript and Path(transcript).is_file():
@@ -148,5 +141,5 @@ def _log_error(text: str) -> None:
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as handle:
             handle.write(f"--- {datetime.now(UTC).isoformat()} ---\n{text}\n")
-    except OSError:
+    except Exception:  # noqa: BLE001, S110 — even invalid storage must not break a hook
         pass  # last resort: a broken log must not break the hook

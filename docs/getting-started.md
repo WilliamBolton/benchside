@@ -15,9 +15,9 @@ for the Git/terminal route. A plugin packages skills and their supporting runtim
 | Clone GitHub and ask an agent to set it up | Install source dependencies and run guided setup. The installed skill remembers the runtime so later chats work outside the checkout. No model-specific backend is needed. |
 | Codex or another local agent | `bench setup --agent codex` or `--agent generic --skills-dir <host directory>` installs the shared seven-role skill. The agent runs setup for the researcher. |
 | Terminal / Claude Code | Shared skill through `bench setup --agent claude` or `bench init`; explicit `bench init --legacy-cli` provides legacy role commands and local session hooks. |
-| OpenAI plugin | `benchside-plugin-0.1.2.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
-| Claude plugin | `benchside-claude-plugin-0.1.2.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
-| Claude standalone skill | `benchside-claude-0.1.2.zip` remains available for custom-skill installation. |
+| OpenAI plugin | `benchside-plugin-0.1.3.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
+| Claude plugin | `benchside-claude-plugin-0.1.3.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
+| Claude standalone skill | `benchside-claude-0.1.3.zip` remains available for custom-skill installation. |
 
 The expanded implementation is in [draft PR #5](https://github.com/science-works/benchside/pull/5).
 Published main does not yet contain these changes. No public plugin listing has been published.
@@ -86,7 +86,7 @@ updated the shared Google notebook. After the user approved the separate Google
 Docs connector, Claude resumed that same project and saved a synthetic decision
 using a guarded update. Independent readback verified both the state and journal;
 Google metadata showed both documents unshared. The earlier Drive-only check did
-not test this editing connector. The rebuilt 0.1.2 fixes still need installed
+not test this editing connector. The rebuilt 0.1.3 fixes still need installed
 update acceptance; update all apps sharing a notebook together.
 Claude's native Docs tools do not expose sharing permissions, so a private sharing
 state must be verified in the UI. Other accounts/connectors still need acceptance.
@@ -114,6 +114,18 @@ customizations before replacing the managed installation. Do not unzip a package
 over an earlier source installation: old runtime settings and removed files can
 remain active. Keep research records in their existing storage and reopen the
 same project after updating.
+
+For the optional legacy CLI route, conversation identities normally come from
+Claude's per-conversation environment. The compatibility fallback in the project
+registration expires after 24 hours; an explicit conversation ID still takes
+precedence. Expired registrations and their pointers are retired without closing
+unfinished sittings or changing scientific records. Switching to the shared skill
+clears that project's legacy registrations because its lifecycle hooks are removed.
+If a crash leaves several recent registrations, ask the agent to identify the
+ended conversation and run `bench session clear --project <project> --session <ended-id>`.
+The error lists the registered IDs. Clear only an ended conversation, then resume
+the chosen unfinished sitting explicitly if needed. Researchers can request this
+recovery in chat; they do not need to open a terminal.
 
 ## Optional sharing
 
@@ -174,9 +186,9 @@ uv run --with pip python scripts/build_release.py
 
 This produces:
 
-- `dist/benchside-claude-0.1.2.zip`: standalone Claude skill, with all roles.
-- `dist/benchside-claude-plugin-0.1.2.zip`: Claude plugin upload, with manifest at the archive root.
-- `dist/benchside-plugin-0.1.2.zip`: portable/OpenAI plugin with Codex compatibility metadata.
+- `dist/benchside-claude-0.1.3.zip`: standalone Claude skill, with all roles.
+- `dist/benchside-claude-plugin-0.1.3.zip`: Claude plugin upload, with manifest at the archive root.
+- `dist/benchside-plugin-0.1.3.zip`: portable/OpenAI plugin with Codex compatibility metadata.
 
 All packages are generated from the same code and role definitions. Claude packaging
 adds its manifest and upload layout; it does not fork the implementation or create

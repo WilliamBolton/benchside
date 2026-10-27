@@ -68,7 +68,9 @@ def resolve_paths() -> Paths:
     elif storage_profile_path().is_file():
         profile = json.loads(storage_profile_path().read_text())
         if (
-            set(profile) != {"local_directory"}
+            not isinstance(profile, dict)
+            or set(profile) != {"local_directory"}
+            or not isinstance(profile["local_directory"], str)
             or not Path(profile["local_directory"]).is_absolute()
         ):
             raise ValueError(

@@ -9,7 +9,11 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from benchside.domain.export.model.metascience import ActivityPayload, SurveyPayload
+from benchside.domain.export.model.metascience import (
+    MANUAL_SAMPLING,
+    ActivityPayload,
+    SurveyPayload,
+)
 from benchside.domain.export.model.reporting import FeedbackPayload, UsagePayload
 from benchside.domain.export.model.wire import validate_payload
 from benchside.domain.shared.error import BenchsideError
@@ -52,6 +56,8 @@ def summarise(files):
             elif schema == "benchside.activity.v1":
                 parsed = ActivityPayload.model_validate_json(text)
                 previous = activity.get(parsed.batch_id)
+                if previous and previous.sampling != parsed.sampling:
+                    conflicts.add(("activity-method", parsed.batch_id))
                 if previous and previous.revision == parsed.revision and previous != parsed:
                     conflicts.add(("activity", parsed.batch_id, parsed.revision))
                 if previous is None or parsed.revision > previous.revision:
@@ -68,21 +74,45 @@ def summarise(files):
         if ("usage", *key, value.revision) not in conflicts
     }
     surveys = {k: v for k, v in surveys.items() if ("survey", k) not in conflicts}
-    activity = {k: v for k, v in activity.items() if ("activity", k, v.revision) not in conflicts}
+    activity = {
+        k: v
+        for k, v in activity.items()
+        if ("activity", k, v.revision) not in conflicts and ("activity-method", k) not in conflicts
+    }
     survey_counts = Counter()
     activity_counts = Counter()
+    by_sampling = {}
     for survey in surveys.values():
         for question, answer in survey.answers.items():
             survey_counts[
                 f"{survey.study_id}@{survey.study_version}/{survey.study_sha256}/{question}/{answer}"
             ] += 1
     for batch in activity.values():
+        method = by_sampling.setdefault(
+            batch.sampling,
+            {
+                "batches": 0,
+                "coverage": Counter(),
+                "findings": Counter(),
+            },
+        )
+        method["batches"] += 1
+        method["coverage"].update(
+            {
+                "eligible_in_submitted_batches": batch.eligible,
+                "selected_in_submitted_batches": batch.selected,
+                "reviewed_and_shared": len(batch.observations),
+            }
+        )
         for observation in batch.observations:
+            findings = Counter()
             for field in ("activity", "obstacle", "verification", "outcome"):
                 finding = getattr(observation, field)
-                activity_counts[f"{field}/{finding.value}/{finding.basis}"] += 1
-            activity_counts[f"benchside_role/{observation.benchside_role}"] += 1
-            activity_counts[f"host/{observation.host}"] += 1
+                findings[f"{field}/{finding.value}/{finding.basis}"] += 1
+            findings[f"benchside_role/{observation.benchside_role}"] += 1
+            findings[f"host/{observation.host}"] += 1
+            activity_counts.update(findings)
+            method["findings"].update(findings)
     active = defaultdict(set)
     uses = Counter()
     weekly = defaultdict(lambda: Counter())
@@ -160,9 +190,17 @@ def summarise(files):
             "reviewed_and_shared": sum(len(b.observations) for b in activity.values()),
         },
         "activity_findings": dict(sorted(activity_counts.items())),
+        "activity_by_sampling": {
+            key: {
+                "batches": value["batches"],
+                "coverage": dict(value["coverage"]),
+                "findings": dict(sorted(value["findings"].items())),
+            }
+            for key, value in sorted(by_sampling.items())
+        },
         "invalid_files": invalid,
         "conflicting_snapshots": len(conflicts),
-        "interpretation": "Opt-in installations, not unique people or total adoption. Completion does not establish scientific benefit. Datasets are not linked. Demographic buckets describe optional self-reports from each installation's latest accepted weekly snapshot; they are not population estimates or unique people. Activity coverage describes only submitted batches of user-selected accessible sessions, not all research activity. Model-inferred findings and researcher-reported outcomes are distinct; review and nonresponse introduce selection bias. Validate the classifier on separately consented examples before making accuracy claims. These exploratory rollout findings are separate from the original paper evaluation.",
+        "interpretation": "Opt-in installations, not unique people or total adoption. Completion does not establish scientific benefit. Datasets are not linked. Demographic buckets describe optional self-reports from each installation's latest accepted weekly snapshot; they are not population estimates or unique people. Activity totals pool submitted batches only; use activity_by_sampling to distinguish legacy percentage sampling, capped random selection and manual selection. Manual eligible counts describe only the researcher-chosen set, not a population denominator or frequency estimate. Random selection covers only the supplied accessible research inventory. Historical legacy samples may cover a partial week. Model-inferred findings and researcher-reported outcomes are distinct; review and nonresponse introduce selection bias. Validate the classifier on separately consented examples before making accuracy claims. These exploratory rollout findings are separate from the original paper evaluation.",
     }
 
 
@@ -194,8 +232,8 @@ def markdown(report):
         ("Would use again", "feedback_repeat_intent"),
         ("Failures", "failures"),
         ("Survey answers (study/version/definition/question/answer)", "survey_answers"),
-        ("Activity sampling coverage", "activity_coverage"),
-        ("Activity findings and evidence basis", "activity_findings"),
+        ("Pooled activity counts (submitted batches only)", "activity_coverage"),
+        ("Pooled activity findings and evidence basis", "activity_findings"),
     ]:
         lines += ["", f"## {label}", "", "| Measure | Count |", "|---|---|"]
         for name, value in report[key].items():
@@ -207,6 +245,23 @@ def markdown(report):
             lines.append(f"| {name} | {rendered} |")
         if not report[key]:
             lines.append("| No reports yet | — |")
+    for method, values in report.get("activity_by_sampling", {}).items():
+        label = (
+            "Researcher-chosen conversations" if method == MANUAL_SAMPLING else "Random selection"
+        )
+        lines += ["", f"## {label}: {method}", ""]
+        if method == MANUAL_SAMPLING:
+            lines += [
+                "Eligible counts cover only the chosen set; no population frequency estimate.",
+                "",
+            ]
+        lines += ["| Measure | Count |", "|---|---|"]
+        for key, value in {
+            "batches": values["batches"],
+            **values["coverage"],
+            **values["findings"],
+        }.items():
+            lines.append(f"| {key} | {value} |")
     return "\n".join(lines) + "\n"
 
 

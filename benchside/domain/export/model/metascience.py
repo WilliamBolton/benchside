@@ -14,6 +14,20 @@ Digest = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 Day = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 Basis = Literal["model_inferred", "researcher_reported", "unknown"]
 Choice = Literal["invitations", "analysis", "sharing"]
+LEGACY_SAMPLING = "weekly-random-10pct-max5-v1"
+RANDOM_SAMPLING = "weekly-random-max20-v1"
+MANUAL_SAMPLING = "weekly-user-selected-max20-v1"
+Sampling = Literal[
+    "weekly-random-10pct-max5-v1", "weekly-random-max20-v1", "weekly-user-selected-max20-v1"
+]
+
+
+def selection_size(sampling: Sampling, eligible: int) -> int:
+    if sampling == LEGACY_SAMPLING:
+        return min(5, (eligible + 9) // 10)
+    if sampling == RANDOM_SAMPLING:
+        return min(20, eligible)
+    return eligible  # The manual frame is exactly the supplied chosen set, capped separately.
 
 
 def canonical(value):
@@ -186,11 +200,11 @@ class ActivityPayload(StrictValue):
     batch_id: Identifier
     revision: int = Field(ge=1, le=1_000_000)
     week: Day
-    sampling: Literal["weekly-random-10pct-max5-v1"] = "weekly-random-10pct-max5-v1"
+    sampling: Sampling = LEGACY_SAMPLING
     coverage: Literal["user_selected_accessible_sessions"] = "user_selected_accessible_sessions"
     eligible: int = Field(ge=1, le=500)
-    selected: int = Field(ge=1, le=5)
-    observations: list[ActivityObservation] = Field(min_length=1, max_length=5)
+    selected: int = Field(ge=1, le=20)
+    observations: list[ActivityObservation] = Field(min_length=1, max_length=20)
 
     @field_validator("week")
     @classmethod
@@ -201,7 +215,7 @@ class ActivityPayload(StrictValue):
 
     @model_validator(mode="after")
     def coverage_counts(self):
-        if self.selected != min(5, (self.eligible + 9) // 10):
+        if self.selected != selection_size(self.sampling, self.eligible):
             raise ValueError("Selection count does not match the sampling policy")
         if len(self.observations) > self.selected:
             raise ValueError("Reviewed count exceeds selected count")
@@ -222,13 +236,15 @@ class Sample(StrictValue):
     id: Identifier
     inventory_sha256: Digest
     eligible: int = Field(ge=0, le=500)
-    selected: dict[Identifier, Candidate] = Field(max_length=5)
-    records: dict[Identifier, Classification] = Field(default_factory=dict, max_length=5)
+    # Missing in saved pre-0.1.3 samples; never reinterpret their original counts.
+    sampling: Sampling = LEGACY_SAMPLING
+    selected: dict[Identifier, Candidate] = Field(max_length=20)
+    records: dict[Identifier, Classification] = Field(default_factory=dict, max_length=20)
     revision: int = Field(default=0, ge=0, le=1_000_000)
 
     @model_validator(mode="after")
     def consistent_sample(self):
-        if len(self.selected) != min(5, (self.eligible + 9) // 10):
+        if len(self.selected) != selection_size(self.sampling, self.eligible):
             raise ValueError("Invalid private sample size")
         if set(self.records) - set(self.selected):
             raise ValueError("Classification is not part of this sample")
@@ -262,7 +278,7 @@ class MetaReceipt(StrictValue):
     status: Literal["stored", "duplicate"]
     sha256: Digest
     received_at: str
-    observations: int = Field(ge=1, le=5)
+    observations: int = Field(ge=1, le=20)
 
     @field_validator("received_at")
     @classmethod
