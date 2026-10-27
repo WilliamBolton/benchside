@@ -57,6 +57,7 @@ def build(wheel: Path, output: Path):
     build_agent_skill(skill)
     runtime = skill / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / "source.json").unlink(missing_ok=True)  # Never ship a local source launcher target.
     for stale in runtime.glob("*.whl"):
         stale.unlink()
     shutil.copyfile(wheel, runtime / wheel.name)

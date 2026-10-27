@@ -322,7 +322,9 @@ def test_legacy_notebook_without_session_files_still_restores():
         name: value for name, value in body["files"].items() if not name.startswith("app-sessions/")
     }
     notebook.document = markdown(pack(body, snapshot["workspace_id"], snapshot["revision"]))
-    result = notebook.run({"action": "start", "role": "pi", **setup})
+    restored_setup = notebook.setup()
+    assert restored_setup["project_id"] == setup["project_id"]
+    result = notebook.run({"action": "start", "role": "pi", **restored_setup})
     assert result["ok"] and result["result"]["sitting"]["host"] == "chatgpt"
 
 

@@ -137,6 +137,9 @@ For Claude use `host:claude`; use the real surface and an app version only if
 known. Keep the returned session ID for this conversation. The project ID stays
 stable across chats and apps when you reuse it from the notebook index. Native
 creation identity is preserved for compatibility with existing notebooks.
+If setup supplies a registered journal document ID as `project_key`, the runtime
+also reuses that existing project across apps. If older data contains several
+projects for that document, select the intended existing project ID explicitly.
 
 ## Record, save, verify
 
@@ -175,8 +178,14 @@ steps use `"sitting_id":{"$ref":"start.sitting.id"}`. There is no
 the project and conversation-session references. The whole batch has one operation ID: preserve it and
 the original steps for conflict recovery. An inner failure returns `ok:false`
 with the original unchanged snapshot; none of the steps were saved. Read the
-error before retrying. A replay returns the original results without adding a
-session or duplicating records. Follow the save/confirm sequence below unchanged.
+error before retrying. A replay never adds a session or duplicates records.
+Recent responses are cached exactly within a bounded 32 KiB response cache.
+Older or oversized responses return `result_compacted:true` and a small
+acknowledgement containing retained stable IDs where available. Do not treat that
+acknowledgement as current recall or consent: use fresh read-only recall/status
+calls for current state. Every completed operation ID and request digest remains
+recorded, including after response compaction. Follow the save/confirm sequence
+below unchanged.
 
 Batches allow setup, recording, status reads, profile/participation choices and
 explicit consent/scope changes. Network requests, submission previews and sends
@@ -222,11 +231,32 @@ it; if a later revision contains the operation ID, replay is a no-op. Do not
 blindly repeat an already applied native edit. Never replace an invalid or
 unreadable notebook with an empty one. At the size limit, preserve the notebook
 and report that archival support is needed; do not truncate scientific history.
+An unrecognised event or event field produces `native_update_required`: update
+the installed package and reread the same notebook. Never discard unknown events
+to make an older package accept it.
+
+`native.inspect` and runtime responses include capacity information. Ordinary
+writes leave 16 KiB of document space and 64 KiB of decoded state for privacy
+controls. Consent withdrawal can use that reserve. In a legacy notebook already
+at the hard limit, withdrawal first compacts cached responses; if necessary it
+checkpoints the consent ledger to its effective active permissions while keeping
+all scientific records, submitted receipts and operation identities. A response
+with `control_history_compacted:true` indicates that consent-history checkpoint;
+retain the previous notebook version for its historical consent audit. Old
+approvals do not become valid again when a new grant is issued.
+
+Finite notebooks still need eventual archival. If irreducible legacy data fills
+the hard limit even after compaction, a withdrawal can fail to save. Report that
+explicitly, stop sharing and preserve the notebook while moving to larger private
+storage; never claim consent has been durably changed from an unsuccessful save.
 
 Sharing still requires the exact preview approval described in `sharing.md`.
 Read current native consent and the approved draft immediately before
 `sharing.send`; pass the original draft ID and approved digest. Only the selected
 payload goes to the collector. Network receipt and native save are separate:
+a conservative capacity preflight reserves room for bounded collector receipts
+before any submission POST. A full notebook refuses the POST. This does not
+guarantee that the subsequent host document update will succeed.
 a submission can succeed while saving its receipt fails. Say so, preserve its
 receipt/candidate, and recover using the same draft bytes and approval. A retry
 must recheck current consent and destination; never recreate or auto-approve a

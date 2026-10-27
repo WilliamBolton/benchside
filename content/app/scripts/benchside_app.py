@@ -1,15 +1,140 @@
-"""Bootstrap the packaged runtime and accept one structured request on stdin."""
+"""Run the installed source or packaged runtime with one JSON request on stdin."""
 
 import hashlib
 import importlib.util
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+
+def private_cache_directory(identity):
+    """A shared temporary parent must not let another account substitute our code."""
+    base = Path(tempfile.gettempdir()).resolve()
+    for parent in (base, *base.parents):
+        info = parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid not in {0, os.getuid()}
+            or (info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX)
+        ):
+            raise RuntimeError("Unsafe ancestor for the Benchside runtime cache")
+    directory = base
+    for name in (f"benchside-runtime-v2-{os.getuid()}", identity):
+        directory /= name
+        try:
+            directory.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        info = directory.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.getuid()
+            or info.st_mode & 0o077
+        ):
+            raise RuntimeError("Runtime cache must be a private, owned directory without symlinks")
+    return directory
+
+
+def cache_file(path, flags, *, private=False):
+    """Never follow a lock/manifest symlink or open a special file."""
+    descriptor = os.open(path, flags | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    info = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_nlink != 1
+        or info.st_mode & (0o077 if private else 0o022)
+    ):
+        os.close(descriptor)
+        raise RuntimeError("Unsafe file in the Benchside runtime cache")
+    return descriptor
+
+
+def cache_inventory(directory):
+    """Detect changed, injected or missing executable content before import."""
+    if not stat.S_ISDIR(directory.lstat().st_mode):
+        raise RuntimeError("Runtime cache must not contain links or special files")
+    inventory = {}
+    for path in (directory, *sorted(directory.rglob("*"))):
+        info = path.lstat()
+        if info.st_uid != os.getuid() or info.st_mode & 0o022:
+            raise RuntimeError("Unsafe ownership or permissions in the runtime cache")
+        if stat.S_ISDIR(info.st_mode):
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError("Runtime cache must not contain links or special files")
+        with os.fdopen(cache_file(path, os.O_RDONLY), "rb") as handle:
+            inventory[str(path.relative_to(directory))] = hashlib.file_digest(
+                handle, "sha256"
+            ).hexdigest()
+    return inventory
+
+
+def seal_cache(directory):
+    """Installers may create permissive bookkeeping files inside our private tree."""
+    if not stat.S_ISDIR(directory.lstat().st_mode):
+        raise RuntimeError("Runtime cache must not contain links or special files")
+    for path in (directory, *sorted(directory.rglob("*"))):
+        info = path.lstat()
+        if info.st_uid != os.getuid() or not (
+            stat.S_ISDIR(info.st_mode) or (stat.S_ISREG(info.st_mode) and info.st_nlink == 1)
+        ):
+            raise RuntimeError("Unsafe file produced by the offline runtime installer")
+        path.chmod(stat.S_IMODE(info.st_mode) & 0o700, follow_symlinks=False)
+
+
+def run_source(request, source):
+    repair = (
+        "Restore or reinstall the Benchside source environment, then have your agent "
+        "rerun bench setup for this skill location. Keep using the existing research-record storage."
+    )
+    try:
+        settings = json.loads(source.read_text())
+        if set(settings) != {"schema", "python", "package_root"} or (
+            settings["schema"] != "benchside.source.v1"
+        ):
+            raise ValueError("Invalid source runtime configuration")
+        interpreter = Path(settings["python"])
+        package_root = Path(settings["package_root"])
+        if not interpreter.is_absolute() or not package_root.is_absolute():
+            raise ValueError("Source runtime paths must be absolute")
+        if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
+            raise ValueError("The saved Python interpreter is unavailable")
+        if not (package_root / "benchside/application/bridge.py").is_file():
+            raise ValueError("The saved Benchside source is unavailable")
+        response = subprocess.run(
+            [
+                str(interpreter), "-I", "-c",
+                (
+                    "import sys; sys.path.insert(0, sys.argv[1]); "
+                    "from benchside.application.bridge import main; raise SystemExit(main())"
+                ),
+                str(package_root),
+            ],
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=240,
+        )
+        result = json.loads(response.stdout)
+        if not isinstance(result, dict) or type(result.get("ok")) is not bool:
+            raise ValueError("The installed runtime did not return a valid response")
+    except (OSError, KeyError, TypeError, ValueError) as error:
+        raise RuntimeError(f"Benchside's source runtime could not start: {error}. {repair}") from error
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            "Benchside's source runtime timed out. Check the saved records before retrying; "
+            "the action may already have completed."
+        ) from error
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["ok"] else 1
 
 
 def bootstrap():
@@ -35,15 +160,29 @@ def bootstrap():
     identity = hashlib.sha256(
         (json.dumps(manifest, sort_keys=True) + sys.version).encode(),
     ).hexdigest()
-    directory = Path(tempfile.gettempdir()) / f"benchside-runtime-{os.getuid()}" / identity
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    directory = private_cache_directory(identity)
+    site = directory / "site"
     # First-use setup is isolated and locked. It never installs into the project.
     import fcntl
 
-    with (directory / ".install.lock").open("w") as lock:
+    descriptor = cache_file(directory / ".install.lock", os.O_RDWR | os.O_CREAT, private=True)
+    with os.fdopen(descriptor, "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        marker = directory / ".ready"
-        if not marker.exists():
+        marker = directory / ".ready.json"
+        if marker.exists() or marker.is_symlink():
+            with os.fdopen(cache_file(marker, os.O_RDONLY, private=True)) as handle:
+                receipt = json.load(handle)
+            if (
+                receipt.get("identity") != identity
+                or not receipt.get("files")
+                or receipt["files"] != cache_inventory(site)
+            ):
+                raise RuntimeError("Runtime cache integrity check failed; rebuild this private cache")
+        else:
+            if site.exists() or site.is_symlink():
+                seal_cache(site)  # Validate incomplete installer output before discarding it.
+                shutil.rmtree(site)
+            site.mkdir(mode=0o700)
             if importlib.util.find_spec("pip"):
                 installer = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check"]
             elif shutil.which("uv"):
@@ -57,12 +196,12 @@ def bootstrap():
                 if not key.startswith(("PIP_", "UV_")) or key == "UV_CACHE_DIR"
             }
             environment.update(
-                PIP_CONFIG_FILE=os.devnull, UV_OFFLINE="true", UV_NO_CONFIG="true"
+                PIP_CONFIG_FILE=os.devnull, UV_OFFLINE="true", UV_NO_CONFIG="true", UV_LINK_MODE="copy"
             )
             subprocess.run(
                 installer
                 + [
-                    "--target", str(directory), "--no-index", "--no-deps",
+                    "--target", str(site), "--no-index", "--no-deps",
                     "--find-links", str(wheelhouse), "--only-binary=:all:",
                     "--require-hashes", "-r", str(requirements),
                 ],
@@ -73,12 +212,20 @@ def bootstrap():
             )
             with zipfile.ZipFile(wheel) as archive:
                 for name in archive.namelist():
-                    target = (directory / name).resolve()
-                    if not target.is_relative_to(directory.resolve()):
+                    target = (site / name).resolve()
+                    if not target.is_relative_to(site.resolve()):
                         raise RuntimeError("Unsafe runtime archive path")
-                archive.extractall(directory)
-            marker.write_text("ready\n")
-    sys.path.insert(0, str(directory))
+                archive.extractall(site)
+            seal_cache(site)
+            receipt = {"identity": identity, "files": cache_inventory(site)}
+            with os.fdopen(
+                cache_file(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, private=True), "w"
+            ) as handle:
+                json.dump(receipt, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(site))
 
 
 def main():
@@ -86,6 +233,9 @@ def main():
         request = json.load(sys.stdin)
         if not isinstance(request, dict) or not isinstance(request.get("action"), str):
             raise TypeError("Provide a JSON object with an action")
+        source = Path(__file__).resolve().parents[1] / "runtime/source.json"
+        if source.is_file():
+            return run_source(request, source)
         bootstrap()
         from benchside.application.bridge import run
 

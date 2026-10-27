@@ -12,7 +12,6 @@ validation, referential integrity, close enforcement.
 
 import argparse
 import json
-import os
 import sys
 from contextlib import nullcontext
 
@@ -41,13 +40,19 @@ def main(argv: list[str] | None = None) -> int:
     args.ui = UI.create()
     try:
         from benchside.infrastructure.files import file_lock
+        from benchside.infrastructure.session_context import recording_context
 
         transaction = (
             nullcontext()
             if args.command in {"compile", "setup", "project", "init", "app"}
             else file_lock(runtime.current_paths().home / ".transaction.lock")
         )
-        with transaction:
+        context = (
+            nullcontext()
+            if args.command == "app"
+            else recording_context(provenance=runtime.recording_provenance())
+        )
+        with transaction, context:
             return args.run(args)
     except BenchsideError as err:
         _record_failure(args.command, err)
@@ -111,6 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--agent", choices=["claude", "codex", "generic"], default="claude")
     p.add_argument("--skills-dir", type=str, help="skill discovery directory used by this agent")
     p.add_argument("--storage", type=str, help="explicit durable local directory outside Git")
+    p.add_argument(
+        "--legacy-cli", action="store_true",
+        help="explicit Claude Code CLI role skills and hooks instead of the shared app skill",
+    )
     p.set_defaults(run=cmd_init_dispatch)
 
     p = sub.add_parser("app", help="agent API: one structured JSON request on stdin")
@@ -307,7 +316,7 @@ def cmd_open(args) -> int:
     project_id = runtime.resolve_project(args.project)
     for record in runtime.live_pointers(paths):
         if (
-            record.get("session") == runtime.session_name()
+            record.get("session") == runtime.session_name(paths, project_id)
             and record.get("project_id") == project_id.root
         ):
             raise BenchsideError(
@@ -327,11 +336,7 @@ def cmd_open(args) -> int:
             critique_requires_hypothesis=persona.critique_requires_hypothesis,
             record_kind=persona.record_kind,
             persona_version=persona.version,
-            host=os.environ.get(
-                "BENCHSIDE_HOST", "claude" if os.environ.get("CLAUDE_SESSION_ID") else "unknown"
-            ),
-            app_version=os.environ.get("BENCHSIDE_APP_VERSION", "unknown"),
-            surface=os.environ.get("BENCHSIDE_SURFACE", "cli"),
+            **runtime.recording_provenance().model_dump(),
         )
     runtime.write_pointer(
         paths, sitting_id=sitting_id, project_id=project_id, persona_id=persona.id.root

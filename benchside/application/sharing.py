@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import Field
 
 from benchside import __version__
+from benchside.application.submission_failures import record_submission_failure
 from benchside.config import Paths
 from benchside.domain.export.event.reporting import ReportSubmitted
 from benchside.domain.export.model.reporting import (
@@ -22,7 +23,6 @@ from benchside.domain.export.service.consent import ConsentService
 from benchside.domain.export.service.export import ExportService
 from benchside.domain.export.service.reporting import ReportingService, week_start
 from benchside.domain.shared.error import (
-    BenchsideError,
     ConsentRequiredError,
     NotFoundError,
     ValidationError,
@@ -60,17 +60,23 @@ class SharingFlow:
         self.ledger = JournalConsentRepository(self.journal)
         self.consent = ConsentService(repository=self.ledger, journal=self.journal)
         self.redactor = TextRedactor()
-        self.sinks = sinks or {
-            channel: self._sink(channel) for channel in ("gaps", "feedback", "usage")
-        }
-        self.export = ExportService(
+        self.sinks = sinks if sinks is not None else {}
+
+    @property
+    def export(self):
+        return ExportService(
             observations=JournalObservationReader(self.journal),
             consent=self.consent,
             redactor=self.redactor,
-            sink=self.sinks["gaps"],
+            sink=self._get_sink("gaps"),
             ledger=self.ledger,
             journal=self.journal,
         )
+
+    def _get_sink(self, channel):
+        # Optional collection configuration must not block private scientific work.
+        # Re-resolve at each preview/send so a changed endpoint needs new approval.
+        return self.sinks[channel] if channel in self.sinks else self._sink(channel)
 
     @staticmethod
     def _sink(channel):
@@ -170,6 +176,8 @@ class SharingFlow:
     def prepare(self, channel, *, only=None, edits=None, feedback_id=None, comment=None, week=None):
         if channel == "gaps":
             previews = self.export.previews(only=only, edits=edits)
+            if not any(preview.observation_ids for preview in previews):
+                raise ValidationError("No selected, unshared workflow observations to preview")
         else:
             if channel not in {"feedback", "usage"}:
                 raise ValidationError("Unknown sharing channel")
@@ -178,6 +186,7 @@ class SharingFlow:
                 raise ConsentRequiredError(
                     f"{channel.title()} reporting is off; nothing was shared"
                 )
+            sink = self._get_sink(channel)
             if channel == "feedback":
                 payload = self.reporting.feedback_payload(feedback_id, __version__)
                 if comment is not None:
@@ -195,7 +204,7 @@ class SharingFlow:
                     observation_ids=(),
                     grant_id=grant,
                     payload_sha256=ExportService._digest(payload),
-                    destination=self.sinks[channel].destination,
+                    destination=sink.destination,
                     redaction_findings=tuple(
                         f"{f.tier}:{f.category} in {f.field}" for f in self.redactor.scan(payload)
                     ),
@@ -259,8 +268,26 @@ class SharingFlow:
         return SubmissionDraft.model_validate_json(path.read_text())
 
     def send(self, identifier, approved_sha256):
-        draft = self.load(identifier)
         try:
+            draft = self.load(identifier)
+            if draft.channel == "gaps":
+                active = self.consent.active_grant()
+                grant = active.id if active else None
+            else:
+                grant = self.reporting.active_grant(draft.channel)
+            if not grant or grant != draft.preview.grant_id:
+                raise ConsentRequiredError("Sharing consent changed; review the submission again")
+            sink = self._get_sink(draft.channel)
+            digest = ExportService._digest(draft.preview.payload)
+            if (
+                digest != draft.preview.payload_sha256
+                or digest != approved_sha256
+                or draft.preview.destination != sink.destination
+            ):
+                raise ValidationError(
+                    "Approve the exact payload and destination in the current preview",
+                    code="submission_invalid",
+                )
             if draft.channel == "gaps":
                 return self.export.export(
                     preview=draft.preview,
@@ -272,7 +299,7 @@ class SharingFlow:
 
                 data = UsagePayload.model_validate_json(draft.preview.payload).model_dump()
                 if (draft.demographics_revision or 0) != self.profile().revision:
-                    raise ValidationError(
+                    raise ConsentRequiredError(
                         "Demographic preferences changed; review a new usage preview"
                     )
                 current = self.paths.home / "reporting" / f"usage-{data['week']}.json"
@@ -285,14 +312,11 @@ class SharingFlow:
                 channel=draft.channel,
                 preview=draft.preview,
                 approved_sha256=approved_sha256,
-                sink=self.sinks[draft.channel],
+                sink=sink,
                 redactor=self.redactor,
             )
         except Exception as err:
-            try:
-                self.reporting.failure(getattr(err, "code", "submission_invalid"))
-            except (BenchsideError, OSError):
-                pass  # Preserve the original failure even if its counter cannot be saved.
+            record_submission_failure(self.paths, err)
             raise
 
     def history(self):

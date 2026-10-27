@@ -45,7 +45,7 @@ Record a review output with a fair summary, strengths, justified major and minor
 
 Record the scientist's chosen next revision or response and rationale; unresolved limitations can be explicitly accepted.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** A revision priority or next action is agreed.
 

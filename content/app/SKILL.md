@@ -21,7 +21,9 @@ storage, or a compatible installed cloud connector. Inspect actual tools before
 offering a location. Follow the researcher's existing choice when returning.
 
 Read [the app adapter guide](references/app-api.md). Packaged installations use
-`scripts/benchside_app.py`; source installations use `bench app`. The agent runs
+`scripts/benchside_app.py`; source installations created by `bench setup` use the
+same entry, which remembers their Python environment. A checkout before setup can
+use `uv run bench app`. The agent runs
 the code and passes JSON on stdin. Never interpolate research text into shell
 commands or ask the researcher to type developer commands.
 

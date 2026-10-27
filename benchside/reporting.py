@@ -5,7 +5,6 @@ usage revisions replace earlier snapshots; repeated uploads never add counts.
 """
 
 import argparse
-import hashlib
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -26,8 +25,10 @@ def summarise(files):
             schema = data.get("schema")
             if schema == "benchside.gaps.v1":
                 for item in validate_payload(text)["observations"]:
-                    key = json.dumps(item, sort_keys=True, ensure_ascii=False)
-                    gaps[hashlib.sha256(key.encode()).hexdigest()] = item
+                    previous = gaps.get(item["id"])
+                    if previous is not None and previous != item:
+                        conflicts.add(("gaps", item["id"]))
+                    gaps[item["id"]] = item
             elif schema == "benchside.feedback.v1":
                 parsed = FeedbackPayload.model_validate_json(text)
                 existing = feedback.get(parsed.feedback.id)
@@ -59,6 +60,7 @@ def summarise(files):
                 invalid += 1
         except (BenchsideError, OSError, ValueError, TypeError, AttributeError):
             invalid += 1
+    gaps = {k: v for k, v in gaps.items() if ("gaps", k) not in conflicts}
     feedback = {k: v for k, v in feedback.items() if ("feedback", k) not in conflicts}
     usage = {
         key: value

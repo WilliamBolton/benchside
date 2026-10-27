@@ -46,7 +46,7 @@ Specify units, comparisons, outcomes, controls, sampling or assignment, confound
 
 Resolve real critiques and record the scientist's chosen next action with rationale.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** A feasible next step is agreed.
 

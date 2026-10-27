@@ -21,7 +21,7 @@ from benchside.domain.shared.event import Event
 from benchside.domain.shared.model.ids import ProjectId
 from benchside.infrastructure.files import file_lock
 from benchside.infrastructure.journal.registry import ensure_events_registered
-from benchside.infrastructure.session_context import current_session
+from benchside.infrastructure.session_context import current_provenance, current_session
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,17 @@ class JsonlJournal:
         path = self._paths.journal_file(project_id.root)
         try:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            provenance = current_provenance()
+            if provenance is not None and hasattr(event, "consultation_id"):
+                event = event.model_copy(update={"provenance": provenance})
+            data = event.model_dump(mode="json")
+            if not hasattr(event, "consultation_id") or event.provenance is None:
+                data.pop("provenance", None)
             line = json.dumps(
                 {
                     "type": type(event).__name__,
                     "session": current_session(self._paths, project_id),
-                    "data": event.model_dump(mode="json"),
+                    "data": data,
                 },
                 ensure_ascii=False,
             )

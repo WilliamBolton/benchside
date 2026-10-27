@@ -13,6 +13,7 @@ from urllib.error import URLError
 from urllib.request import Request
 
 from benchside import __version__
+from benchside.application.submission_failures import record_submission_failure
 from benchside.domain.export.model.metascience import (
     ActivityObservation,
     ActivityPayload,
@@ -61,6 +62,7 @@ class StudyClient:
 
 class Metascience:
     def __init__(self, paths, *, catalog=None, sinks=None, today=None):
+        self.paths = paths
         self.path = paths.home / "metascience" / "state.json"
         self.state = (
             MetaState.model_validate_json(self.path.read_text())
@@ -120,7 +122,11 @@ class Metascience:
             grants.setdefault(choice, uuid.uuid4().hex)
         else:
             grants.pop(choice, None)
-        self._save(grants=grants)
+        reset_scopes = choice == "analysis" and (not enabled or "analysis" not in self.state.grants)
+        self._save(
+            grants=grants,
+            scopes=[] if reset_scopes else self.state.scopes,
+        )
         return self.status()
 
     def scopes(self, scopes):
@@ -324,6 +330,13 @@ class Metascience:
         return self._preview("activity", key, payload, grants)
 
     def send(self, draft_id, approved_sha256):
+        try:
+            return self._send(draft_id, approved_sha256)
+        except Exception as err:
+            record_submission_failure(self.paths, err)
+            raise
+
+    def _send(self, draft_id, approved_sha256):
         draft = self.state.drafts.get(draft_id)
         if not draft or self.state.latest.get(draft.key) != draft_id:
             raise ValidationError("Review the current metascience draft first")
@@ -340,11 +353,14 @@ class Metascience:
             key = draft.key.removeprefix("survey:")
             study = self.state.studies[key]
             if not study.active(self.today.isoformat()) or key in self.state.completed:
-                raise ValidationError("The survey has closed or was dismissed")
+                raise ConsentRequiredError("The survey has closed or was dismissed")
             SurveyPayload.model_validate_json(draft.payload).check_study(study)
         receipt = sink.send(draft.payload)
         if receipt is None:
-            raise InfrastructureError("The collector did not acknowledge the submission")
+            raise InfrastructureError(
+                "The collector did not acknowledge the submission",
+                code="submission_receipt_invalid",
+            )
         result = {
             "channel": draft.channel,
             "destination": draft.destination,

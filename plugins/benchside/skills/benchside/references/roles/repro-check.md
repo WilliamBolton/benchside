@@ -45,7 +45,7 @@ Record a reproducibility output listing material omissions, their effect, locati
 
 Record the scientist's next handover or verification action with rationale.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** A next action is agreed.
 

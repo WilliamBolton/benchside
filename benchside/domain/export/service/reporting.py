@@ -3,6 +3,9 @@
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
+from pydantic import TypeAdapter
+from pydantic import ValidationError as SchemaError
+
 from benchside.domain.consultation.event import (
     ConsultationClosed,
     ConsultationOpened,
@@ -21,12 +24,15 @@ from benchside.domain.export.event.reporting import (
 )
 from benchside.domain.export.model.reporting import (
     FAILURE_CODES,
+    AppVersion,
     Channel,
     Feedback,
     FeedbackPayload,
     RecordCounts,
+    Role,
     UsagePayload,
     UsageRow,
+    Version,
 )
 from benchside.domain.export.model.value import ExportPreview
 from benchside.domain.export.port.redactor import Redactor
@@ -46,6 +52,9 @@ RECORD_EVENTS = {
     GapObserved: "gap",
     ResearchRecorded: "record",
 }
+_ROLE = TypeAdapter(Role)
+_VERSION = TypeAdapter(Version)
+_APP_VERSION = TypeAdapter(AppVersion)
 
 
 def week_start(now: datetime | None = None) -> str:
@@ -103,9 +112,20 @@ class ReportingService(Service):
                 continue
             events = list(self.journal.read(project_id))
             sittings = {}
+            reportable = {}
             for event in events:
                 if isinstance(event, ConsultationOpened):
                     sittings.setdefault(event.consultation_id, event)
+            for identifier, sitting in sittings.items():
+                try:
+                    reportable[identifier] = (
+                        _ROLE.validate_python(sitting.persona_id.root),
+                        _VERSION.validate_python(sitting.persona_version),
+                    )
+                except SchemaError:
+                    # Custom/legacy roles remain valid private science records,
+                    # but cannot be represented by the collector's strict schema.
+                    continue
             seen = set()
             seen_opens = set()
             seen_closes = set()
@@ -116,18 +136,27 @@ class ReportingService(Service):
                 if not start <= event.recorded_at.astimezone(UTC).date() < end:
                     continue
                 sitting = sittings.get(getattr(event, "consultation_id", None))
-                if sitting is None:
+                if sitting is None or sitting.consultation_id not in reportable:
                     continue
-                host = sitting.host if sitting.host in {"chatgpt", "claude"} else "unknown"
+                # A scientific sitting can continue across apps and upgrades.
+                # Legacy events have no per-event context and retain their
+                # original opening attribution rather than inventing metadata.
+                context = event.provenance or sitting
+                host = context.host if context.host in {"chatgpt", "claude"} else "unknown"
                 surface = (
-                    sitting.surface if sitting.surface in {"web", "desktop", "cli"} else "unknown"
+                    context.surface if context.surface in {"web", "desktop", "cli"} else "unknown"
                 )
+                try:
+                    app_version = _APP_VERSION.validate_python(context.app_version)
+                except SchemaError:
+                    app_version = "unknown"
+                role, role_version = reportable[sitting.consultation_id]
                 key = (
-                    sitting.persona_id.root,
-                    sitting.persona_version,
+                    role,
+                    role_version,
                     host,
                     surface,
-                    sitting.app_version,
+                    app_version,
                 )
                 row = groups.setdefault(
                     key,

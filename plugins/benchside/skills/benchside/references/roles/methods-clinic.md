@@ -46,7 +46,7 @@ Record a methods output containing the discrepancy, evidence for each plausible 
 
 Record the agreed check and what each outcome would change. Capture genuine missing tools or manual work separately as gaps.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** The scientist agrees what to try and what to record.
 

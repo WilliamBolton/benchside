@@ -70,6 +70,8 @@ _CAPTURE_CALL = {
     "record": 'bench record --kind <kind> --summary "..." --detail "..." [--source "..."]',
 }
 
+_APP_CAPTURE_ACTION = {"decision": "decide", "resolution": "resolve"}
+
 
 def _flow(persona: Persona, *, app: bool = False) -> str:
     """Render the persona's phases as numbered sections with explicit
@@ -80,7 +82,11 @@ def _flow(persona: Persona, *, app: bool = False) -> str:
     for i, phase in enumerate(persona.flow.phases, start=1):
         section = [f"### Phase {i} — `{phase.id}`: {phase.goal}", "", phase.guidance.rstrip()]
         for kind in phase.captures:
-            call = f"{kind.value} adapter action" if app else _CAPTURE_CALL[kind.value]
+            call = (
+                f"{_APP_CAPTURE_ACTION.get(kind.value, kind.value)} adapter action"
+                if app
+                else _CAPTURE_CALL[kind.value]
+            )
             if kind.value in {"critique", "gap", "resolution"}:
                 section.append(f"\n**When this occurs, record it:** run `{call}`. Never invent it.")
             else:

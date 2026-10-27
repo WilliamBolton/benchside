@@ -55,7 +55,7 @@ Now, and only now, attack: the claim's grounding, the method's flaws (controls, 
 
 Converge on ONE next step — the cheapest thing that most changes what you'd do afterwards. Recommend, with your reason. The scientist decides; if they pick differently, theirs is the one recorded. Record the agreed direction as a decision with its rationale, then close the sitting converged, with the next step as the outcome.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** The scientist states the next step back to you and it is recorded.
 

@@ -6,9 +6,10 @@ arrives. The rollout is informal; no fixed cohort or required follow-up session.
 
 ## Current verification
 
-The current local build passes 215 tests on Python 3.11 and 3.14. See the
-[27 October release review](release-review-2026-10-27.md) for the 0.1.1 package,
-review scope and remaining release gates.
+See the [27 October release review](release-review-2026-10-27.md) for the current
+0.1.2 review package, executable checks, independent review findings and remaining
+release gates. Installed 0.1.1 passed fresh-chat native restoration and guarded
+save/readback in both apps; the 0.1.2 fixes require a further installed update check.
 Coverage includes native
 memory cases covering all seven roles, project isolation, consent/draft recovery,
 ambiguous saves, operation replay and invalid state. The companion
@@ -27,8 +28,8 @@ follow-up checks, live evidence, fixes and remaining blockers. The rebuilt runti
 saved all seven roles in one guarded transaction to real Google Docs and ChatGPT
 Pages notebooks, with fresh-process confirmation and readable-journal readback.
 The installed Claude plugin was exercised on all seven scientific scenarios.
-Three corrected overclaims did not recur in a fresh installed-plugin check; one
-remaining reproducibility wording correction is rebuilt but not yet installed.
+Three corrected overclaims did not recur in a fresh installed-plugin check.
+The final reproducibility wording check passed in both installed 0.1.1 plugins.
 Both installed apps passed batched native setup, fresh-chat resumption, feedback
 preview, failed submission, retry and consent withdrawal.
 
@@ -43,11 +44,14 @@ This is not yet an outreach-ready cloud release. The final small package update,
 broader scientific response quality and successful in-app staging delivery remain
 checks below. On 27 October, the installed ChatGPT plugin restored and updated the
 existing Google notebook; independent readback confirmed the saved decision and
-unchanged project identity. Claude's Google connector is now connected with
-specific-file access only, but lacks guarded content updates, so that connector
-is not a supported memory route and cross-app Google continuity has not passed.
-Claude's native Docs tools cannot verify sharing permissions; the private state
-was checked in the UI. No hosted journal service has been added, and deployment
+unchanged project identity. After explicit approval of the separate Google Docs
+connector, Claude's installed 0.1.1 plugin resumed that same project and saved a
+synthetic decision at revision 10 using a guarded update and complete readback.
+Independent restoration confirmed the decision; Google metadata showed both test
+documents unshared. This establishes cross-app continuity for the tested accounts.
+The Drive-only check had not tested this separate editing connector. Claude's
+native Docs tools cannot verify sharing permissions; private native state was
+checked in the UI. No hosted journal service has been added, and deployment
 of the new collector routes remains outstanding.
 
 On 22 October, read-only requests from this environment to the public `/v1/gaps`,
@@ -126,8 +130,11 @@ are derived views. A single guarded state write avoids partially saving those
 dependent records. Checksums detect damage; operation IDs prevent committed
 actions being repeated after ambiguous saves. The compressed state is private
 research data, not encryption. State documents are bounded at 190,000 bytes and
-8 MiB uncompressed; a full notebook is preserved and refuses new records until
-archival support is added, rather than silently truncating history.
+8 MiB uncompressed. Full replay responses have a bounded cache, while operation
+IDs and hashes persist. Ordinary writes leave capacity for consent withdrawal;
+submission receipt space is checked before networking. A full notebook preserves
+scientific history and needs archival/larger storage. Update all apps sharing a
+notebook to 0.1.2 together; 0.1.1 cannot read its new provenance/compacted receipts.
 
 On 22 October, native ChatGPT Page creation, read, guarded update and readback
 were verified with synthetic records. Will independently opened a new ChatGPT
@@ -206,9 +213,9 @@ batched setup took about 7½ minutes, including recovery from an incorrect batch
 reference; its fresh-chat resume confirmed revision 11. Installed ChatGPT setup
 took 2m 21s, with fresh-chat resume at 2m 11s. These individual runs are not a
 controlled speed comparison. Both returning stores preserved their choices
-without renewed participation prompts. Field-reference clarifications and the
-final reproducibility wording fix are rebuilt but not installed; browser upload
-attempts remained unavailable after the earlier installations succeeded.
+without renewed participation prompts. On 27 October both apps showed installed 0.1.1, verified the bundled wheel,
+restored those existing projects and saved a resumed session with guarded
+readback. The final reproducibility wording check passed in both apps.
 
 See `content/app/references/native-memory.md` for the host workflow, conflict
 recovery and separation between a network receipt and a successful native save.
@@ -230,7 +237,7 @@ Official sources checked during implementation:
 
 1. Run the Python tests, linter, compiled-skill check and packaged-runtime smoke
    test. Run the companion collector's type check and Worker tests.
-   The package check is `python scripts/smoke_release.py dist/benchside-claude-0.1.1.zip`
+   The package check is `python scripts/smoke_release.py dist/benchside-claude-0.1.2.zip`
    after building the release; repeat it for the two plugin ZIPs. It exercises
    local continuity and simulated native transport, not live cloud persistence.
    Validate the Claude manifest with `claude plugin validate plugins/benchside`.

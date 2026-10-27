@@ -1,9 +1,13 @@
+import base64
 import copy
+import hashlib
+import json
 import uuid
+import zlib
 
 import pytest
 
-from benchside.application.native import reference, run_native, unpack
+from benchside.application.native import markdown, reference, run_native, unpack
 from benchside.domain.shared.error import BenchsideError
 
 
@@ -103,6 +107,47 @@ def test_failure_rolls_back_every_step_and_does_not_consume_operation_id():
     assert not result["ok"] and not result["changed"]
     assert result["markdown"] == original
     assert unpack(result["markdown"])[1] == {"files": {}, "projects": {}, "operations": {}}
+
+
+@pytest.mark.parametrize("operation", ["read_batch", "read_single", "replay", "rollback"])
+def test_alternate_compression_does_not_create_a_state_change(operation):
+    operation_id = uuid.uuid4().hex
+    initial = batch(run_native({"action": "native.create"})["markdown"], setup_steps(), operation_id)
+    snapshot = copy.deepcopy(initial["snapshot"])
+    # A valid envelope produced with different compressor settings has the
+    # same decoded state but a different payload and transport checksum.
+    raw = zlib.decompress(base64.b64decode(snapshot["payload"]))
+    snapshot["payload"] = base64.b64encode(zlib.compress(raw, level=0)).decode("ascii")
+    unsigned = {key: value for key, value in snapshot.items() if key != "sha256"}
+    snapshot["sha256"] = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    assert snapshot["sha256"] != initial["snapshot"]["sha256"]
+    assert unpack(snapshot)[1] == unpack(initial["snapshot"])[1]
+    document = markdown(snapshot)
+    recall = {"action": "recall", "project_id": initial["result"]["project_id"]}
+    if operation == "read_single":
+        result = run_native(
+            {
+                "action": "native.run",
+                "document": document,
+                "workspace_id": snapshot["workspace_id"],
+                "request": recall,
+            }
+        )
+    elif operation == "read_batch":
+        result = batch(document, [{"id": "recall", "request": recall}])
+    elif operation == "replay":
+        result = batch(document, setup_steps(), operation_id)
+        assert result["replayed"]
+    else:
+        failed_steps = setup_steps()
+        failed_steps[-1]["request"]["sitting_id"] = "c-nonexistent"
+        result = batch(document, failed_steps)
+        assert not result["ok"]
+    assert not result["changed"]
+    assert result["snapshot"] == snapshot
+    assert result["markdown"] == document
 
 
 @pytest.mark.parametrize(

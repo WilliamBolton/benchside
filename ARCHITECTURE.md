@@ -140,6 +140,8 @@ escape hatch for cleaning up stranded sittings.
 
 ## Hooks are plumbing, never meaning
 
+Explicit `bench init --legacy-cli` enables Claude Code hooks; the default shared
+entry uses the app adapter without these hooks or competing per-role CLI skills.
 Claude Code hooks fire on session lifecycle, so they own what can be done
 deterministically with no model compliance:
 
@@ -155,7 +157,7 @@ event), so all capture stays in explicit `bench` calls, instructed by skill
 prose. Hook hygiene is inherited from gstack: always exit 0, hard timeouts,
 errors to a log, a fast bail-out outside benchside projects, and consented,
 idempotent registration — Claude Code runs project hooks without prompting,
-so the consent moment has to be ours (`bench init` asks).
+so the consent moment has to be ours (`bench init --legacy-cli` asks).
 
 Sitting pointers are per-session files keyed by `session_id` and scoped to a
 project at resolution time, so parallel sessions never fight and one

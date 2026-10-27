@@ -1,10 +1,15 @@
 # App adapter
 
-The assistant executes `python3 <skill-directory>/scripts/benchside_app.py` for a
-packaged skill, or `bench app` from the installed environment for a source install.
+The assistant executes `python3 <skill-directory>/scripts/benchside_app.py` for an
+installed skill. Source setup saves `runtime/source.json` so this entry can use the
+original Python environment and source directory from any working directory, even
+when `bench` is not on PATH. Keep that environment/source available; after moving or
+reinstalling it, rerun `bench setup` through the agent to refresh the saved paths.
+Packaged skills use their bundled runtime instead. A checkout before setup can
+use `uv run bench app`, or `bench app` when installed on PATH.
 Provide one JSON object on stdin. Responses are JSON: `ok` plus `result`, or an
 error. Read the result before continuing. Python 3.11+ and POSIX storage are required.
-Dependencies are bundled, pinned and installed offline into a temporary runtime
+Packaged dependencies are bundled, pinned and installed offline into a temporary runtime
 cache, not into the researcher's project. Release bundles support standard CPython
 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64), with pip or
 uv provided by the host. Do not change network settings or fetch replacement

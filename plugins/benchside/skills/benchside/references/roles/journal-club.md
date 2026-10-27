@@ -45,7 +45,7 @@ Record a literature output with source locators, central claims, supporting meth
 
 Record the scientist's decision about relevance, a follow-up reading or a research implication, with rationale.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** The takeaway or next action is agreed.
 

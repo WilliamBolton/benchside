@@ -29,6 +29,11 @@ from benchside.infrastructure.session_context import validate_session_id
 SCHEMA = "benchside.native.v1"
 MAX_DOCUMENT_BYTES = 190_000  # Fits one native Pages edit with room for transport metadata.
 MAX_STATE_BYTES = 8 * 1024 * 1024
+# Ordinary writes leave room to withdraw consent even when recording is full.
+DOCUMENT_CONTROL_RESERVE = 16 * 1024
+STATE_CONTROL_RESERVE = 64 * 1024
+MAX_REPLAY_CACHE_BYTES = 32 * 1024
+MAX_COMPACT_RESULT_BYTES = 4 * 1024
 PROJECT = r"p-[a-f0-9]{32}"
 FILE = re.compile(
     rf"(?:app-projects/{PROJECT}\.json|app-sessions/[a-f0-9]{{32}}\.json|"
@@ -66,6 +71,23 @@ def _fail(message):
     raise ValidationError(message, code="native_storage_invalid")
 
 
+def _update_required():
+    raise ValidationError(
+        "This notebook contains records from a newer Benchside version. Update the installed "
+        "Benchside package, then reread this same notebook; do not delete, replace or skip records.",
+        code="native_update_required",
+    )
+
+
+def _capacity_error():
+    raise ValidationError(
+        "Native notebook capacity is exhausted; nothing new should be submitted. "
+        "Preserve this notebook and arrange archival or larger storage. Consent withdrawal "
+        "can use reserved space; do not truncate scientific history.",
+        code="native_capacity",
+    )
+
+
 def _check_files(files):
     ensure_events_registered()
     if not isinstance(files, dict):
@@ -83,10 +105,13 @@ def _check_files(files):
                     _fail("Native journal envelope is incomplete")
                 if envelope["session"] is not None:
                     validate_session_id(envelope["session"])
-                event_type = Event.resolve(envelope["type"])
-                event_type.model_validate(envelope["data"])
+                try:
+                    event_type = Event.resolve(envelope["type"])
+                except KeyError:
+                    _update_required()
                 if set(envelope["data"]) - set(event_type.model_fields):
-                    _fail("Native journal contains unknown event fields")
+                    _update_required()
+                event_type.model_validate(envelope["data"])
                 if "project_id" in envelope["data"] and envelope["data"]["project_id"] != project:
                     _fail("Native journal event belongs to another project")
         elif name == "reporting/profile.json":
@@ -153,10 +178,21 @@ def _validate_body(body):
     for identifier, operation in body["operations"].items():
         if not HEX.fullmatch(identifier) or not isinstance(operation, dict):
             _fail("Invalid native operation identity")
-        if set(operation) != {"request_sha256", "result"} or not re.fullmatch(
-            r"[a-f0-9]{64}", operation["request_sha256"]
-        ):
+        if not {"request_sha256", "result"} <= set(operation) or set(operation) - {
+            "request_sha256",
+            "result",
+            "revision",
+            "result_compacted",
+        }:
+            _update_required()
+        if not re.fullmatch(r"[a-f0-9]{64}", operation["request_sha256"]):
             _fail("Invalid native operation receipt")
+        if "revision" in operation and (
+            type(operation["revision"]) is not int or operation["revision"] < 0
+        ):
+            _fail("Invalid native operation revision")
+        if "result_compacted" in operation and type(operation["result_compacted"]) is not bool:
+            _fail("Invalid native operation result marker")
 
 
 def _validate_project(project):
@@ -175,7 +211,7 @@ def pack(body, workspace_id, revision):
     _validate_body(body)
     raw = _json(body).encode("utf-8")
     if len(raw) > MAX_STATE_BYTES:
-        _fail("Native notebook is full; preserve it and archive before adding more records")
+        _capacity_error()
     snapshot = {
         "schema": SCHEMA,
         "workspace_id": workspace_id,
@@ -184,7 +220,7 @@ def pack(body, workspace_id, revision):
     }
     snapshot["sha256"] = _digest(snapshot)
     if len(_json(snapshot).encode("utf-8")) > MAX_DOCUMENT_BYTES:
-        _fail("Native notebook is full; preserve it and archive before adding more records")
+        _capacity_error()
     return snapshot
 
 
@@ -213,9 +249,10 @@ def unpack(document, expected_workspace_id=None):
             "sha256",
         }:
             _fail("Invalid native memory envelope")
+        if snapshot["schema"] != SCHEMA:
+            _update_required()
         if (
-            snapshot["schema"] != SCHEMA
-            or not HEX.fullmatch(snapshot["workspace_id"])
+            not HEX.fullmatch(snapshot["workspace_id"])
             or type(snapshot["revision"]) is not int
             or snapshot["revision"] < 0
             or len(_json(snapshot).encode("utf-8")) > MAX_DOCUMENT_BYTES
@@ -248,6 +285,174 @@ def markdown(snapshot):
 
 def reference(snapshot):
     return {key: snapshot[key] for key in ("workspace_id", "revision", "sha256")}
+
+
+def _capacity(body, snapshot):
+    state_bytes = len(_json(body).encode("utf-8"))
+    document_bytes = len(_json(snapshot).encode("utf-8"))
+    return {
+        "state_bytes": state_bytes,
+        "document_bytes": document_bytes,
+        "ordinary_state_bytes_remaining": max(
+            0, MAX_STATE_BYTES - STATE_CONTROL_RESERVE - state_bytes
+        ),
+        "ordinary_document_bytes_remaining": max(
+            0, MAX_DOCUMENT_BYTES - DOCUMENT_CONTROL_RESERVE - document_bytes
+        ),
+        "control_reserve_document_bytes": DOCUMENT_CONTROL_RESERVE,
+    }
+
+
+def _require_headroom(body, snapshot, *, additional=0):
+    capacity = _capacity(body, snapshot)
+    # Base64 and conservative compression/framing allowance. Collector receipts
+    # are bounded separately; reserve their worst-case metadata before any POST.
+    encoded_growth = (additional * 4 + 2) // 3 + (1024 if additional else 0)
+    if (
+        capacity["state_bytes"] + additional > MAX_STATE_BYTES - STATE_CONTROL_RESERVE
+        or capacity["document_bytes"] + encoded_growth
+        > MAX_DOCUMENT_BYTES - DOCUMENT_CONTROL_RESERVE
+    ):
+        _capacity_error()
+
+
+def _result_identity(value):
+    """Keep replay identities, never duplicate scientific text or growing recall."""
+    if isinstance(value, list):
+        return [_result_identity(item) for item in value]
+    if not isinstance(value, dict):
+        return None
+    identifiers = {
+        "id",
+        "recorded",
+        "project_id",
+        "session_id",
+        "draft_id",
+        "batch_id",
+        "week",
+        "token",
+        "channel",
+        "payload_sha256",
+        "sha256",
+        "received_at",
+    }
+    result = {
+        key: item
+        for key, item in value.items()
+        if key in identifiers and isinstance(item, str) and len(item) <= 128
+    }
+    for key in ("sitting", "preview", "invitation"):
+        if key in value:
+            result[key] = _result_identity(value[key])
+    if isinstance(value.get("steps"), dict):
+        result["steps"] = {key: _result_identity(item) for key, item in value["steps"].items()}
+    return result
+
+
+def _compact_operations(body, *, current=None, all_results=False):
+    """Bound the response cache while retaining every operation ID and input hash."""
+    remaining = 0 if all_results else MAX_REPLAY_CACHE_BYTES
+    ordered = sorted(
+        body["operations"],
+        key=lambda key: (key == current, body["operations"][key].get("revision", 0)),
+        reverse=True,
+    )
+    for identifier in ordered:
+        operation = body["operations"][identifier]
+        if operation.get("result_compacted"):
+            continue
+        size = len(_json(operation["result"]).encode("utf-8"))
+        if size <= remaining:
+            remaining -= size
+        else:
+            summary = _result_identity(operation["result"])
+            if len(_json(summary).encode("utf-8")) > MAX_COMPACT_RESULT_BYTES:
+                # An unusually large read nested inside a batch is not another
+                # unbounded cache. The durable operation/hash still proves it
+                # completed; obtain current data with a separate read.
+                summary = {"completed": True}
+            body["operations"][identifier] = {
+                **operation,
+                "result": summary,
+                "result_compacted": True,
+            }
+
+
+def _withdrawal(command):
+    if command["action"] == "batch":
+        steps = command.get("steps", [])
+        return (
+            bool(steps)
+            and any(_withdrawal(step["request"]) for step in steps)
+            and all(
+                step["request"]["action"] in READ_ACTIONS or _withdrawal(step["request"])
+                for step in steps
+            )
+        )
+    return (
+        (
+            command["action"] in {"sharing.consent", "metascience.consent"}
+            and command.get("enabled") is False
+        )
+        or (command["action"] == "profile.set" and command.get("include_in_usage") is False)
+        or (
+            command["action"] == "participation.set"
+            and command.get("response") in {"declined", "deferred"}
+        )
+    )
+
+
+def _compact_control_history(body):
+    """Emergency consent checkpoint only; never drop science, receipts or operation IDs."""
+    name = "projects/consent-ledger/journal.jsonl"
+    if name not in body["files"]:
+        return
+    rows = [_loads(line) for line in body["files"][name].splitlines() if line.strip()]
+    revoked = {row["data"]["grant_id"] for row in rows if row["type"] == "ConsentRevoked"}
+    active = [
+        row
+        for row in rows
+        if row["type"] == "ConsentGranted" and row["data"]["grant_id"] not in revoked
+    ]
+    latest = {}
+    for row in rows:
+        if row["type"] == "ReportingConsentChanged":
+            latest[row["data"]["channel"]] = row
+    retained = [
+        row
+        for row in rows
+        if row["type"] not in {"ConsentGranted", "ConsentRevoked", "ReportingConsentChanged"}
+    ]
+    retained += active[-1:]
+    retained += [row for row in latest.values() if row["data"]["enabled"]]
+    body["files"][name] = "".join(_json(row) + "\n" for row in retained)
+
+
+def _preflight_submission(body, snapshot, command):
+    if command["action"] not in {"sharing.send", "metascience.send"}:
+        return
+    # Duplicate destination/ID metadata can appear in both the durable receipt
+    # and its cached result. Include the entire bounded HTTP receipt (8 KiB)
+    # twice and framing, even though normal server receipts are much smaller.
+    if command["action"] == "sharing.send":
+        text = body["files"].get(f"sharing/drafts/{command.get('draft_id')}.json")
+        if text is None:
+            return  # The ordinary validation rejects an unknown draft without network.
+        preview = SubmissionDraft.model_validate_json(text).preview
+        metadata = _json(
+            {
+                "destination": preview.destination,
+                "observation_ids": preview.observation_ids,
+                "grant_id": preview.grant_id,
+            }
+        )
+    else:
+        state = MetaState.model_validate_json(body["files"].get("metascience/state.json", "{}"))
+        draft = state.drafts.get(command.get("draft_id"))
+        if draft is None:
+            return
+        metadata = _json({"destination": draft.destination, "draft_id": draft.id})
+    _require_headroom(body, snapshot, additional=18 * 1024 + 2 * len(metadata.encode("utf-8")))
 
 
 def _restore(files, home):
@@ -364,6 +569,18 @@ def _checked_command(body, command, project):
                 _fail("Select the existing project and its registered journal document")
         elif command.get("project_key") != project["document_id"]:
             _fail("Use the observed native project document ID as project_key")
+        else:
+            registered = [
+                identifier
+                for identifier, saved in body["projects"].items()
+                if saved["document_id"] == project["document_id"]
+            ]
+            if len(registered) > 1:
+                _fail("Several projects use this journal document; select an existing project_id")
+            if registered:
+                # The native document identifies the project across host apps.
+                # Keep its original creation identity instead of hashing a new host.
+                command = {**command, "project_id": registered[0]}
         command = {**command, "title": project["title"]}
     elif project is not None:
         _fail("Project document registration is only supported during setup")
@@ -438,7 +655,11 @@ def run_native(request):
             )
         return {"saved": True, **reference(snapshot)}
     if action == "native.inspect":
-        return {**reference(snapshot), "projects": body["projects"]}
+        return {
+            **reference(snapshot),
+            "projects": body["projects"],
+            "capacity": _capacity(body, snapshot),
+        }
 
     batch = action == "native.batch"
     command = {"action": "batch", "steps": request.get("steps")} if batch else request["request"]
@@ -467,6 +688,9 @@ def run_native(request):
             result = previous["result"]
         else:
             try:
+                if command["action"] in {"sharing.send", "metascience.send"}:
+                    _compact_operations(body)
+                    _preflight_submission(body, pack(body, expected, snapshot["revision"]), command)
                 result = (
                     _execute_batch(app, body, command["steps"])
                     if batch
@@ -481,7 +705,9 @@ def run_native(request):
                     body["operations"][operation_id] = {
                         "request_sha256": request_hash,
                         "result": result,
+                        "revision": snapshot["revision"] + 1,
                     }
+                    _compact_operations(body, current=operation_id)
             except BenchsideError as error:
                 result = None
                 outcome = {"ok": False, "error": str(error), "code": error.code}
@@ -491,14 +717,58 @@ def run_native(request):
                     body = original_body
         if not batch or outcome["ok"]:
             body["files"] = _capture(home)
-        # Repacking at the same revision tells us whether any state changed.
-        changed = pack(body, expected, snapshot["revision"])["sha256"] != snapshot["sha256"]
-        candidate = pack(body, expected, snapshot["revision"] + int(changed))
+        # Compression bytes can differ across runtimes without a state change.
+        # Preserve the original envelope for reads, replays and rolled-back
+        # batches so a different zlib representation cannot trigger a save.
+        changed = _json(body) != _json(original_body)
+        control_history_compacted = False
+        candidate_failed = False
+        delivery_confirmed = False
+        try:
+            try:
+                candidate = pack(body, expected, snapshot["revision"] + 1) if changed else snapshot
+            except ValidationError as error:
+                if error.code != "native_capacity" or not outcome["ok"] or not _withdrawal(command):
+                    raise
+                _compact_operations(body, all_results=True)
+                _compact_control_history(body)
+                candidate = pack(body, expected, snapshot["revision"] + 1)
+                control_history_compacted = True
+            if changed and not _withdrawal(command):
+                _require_headroom(body, candidate)
+        except ValidationError as error:
+            if error.code != "native_capacity":
+                raise
+            # No private transaction is committed if its candidate cannot fit.
+            # A collector receipt, if already obtained despite the conservative
+            # preflight, must still be returned and described as unsaved.
+            delivery_confirmed = outcome["ok"] and command["action"] in {
+                "sharing.send",
+                "metascience.send",
+            }
+            outcome = {"ok": False, "error": str(error), "code": error.code}
+            if delivery_confirmed:
+                outcome["error"] = (
+                    "Collector delivery was confirmed but its native receipt could not be saved. "
+                    "Preserve the returned receipt and original notebook; retry only the same "
+                    "approved draft after recovering capacity."
+                )
+            else:
+                result = None
+                if _withdrawal(command):
+                    outcome["error"] = (
+                        "Consent withdrawal could not fit in this legacy notebook, even after "
+                        "compacting replay responses and consent history. It has not been saved. "
+                        "Stop sharing, preserve the notebook, and recover capacity or move to "
+                        "larger private storage before continuing."
+                    )
+            candidate, body = snapshot, original_body
+            changed, candidate_failed = False, True
         project_id = (result or {}).get("project_id") if isinstance(result, dict) else None
         project_id = project_id or command.get("project_id")
         view = (
             journal_view(app, project_id, body["projects"], candidate["revision"])
-            if project_id in body["projects"]
+            if not candidate_failed and project_id in body["projects"]
             else None
         )
     return {
@@ -506,10 +776,14 @@ def run_native(request):
         "result": result,
         "operation_id": operation_id,
         "replayed": bool(previous),
+        "result_compacted": bool(previous and previous.get("result_compacted")),
+        "control_history_compacted": control_history_compacted,
+        **({"delivery_confirmed": True} if delivery_confirmed else {}),
         "base": reference(snapshot),
         "snapshot": candidate,
         "markdown": markdown(candidate),
         "changed": changed,
         "saved": False,
         "project_journal": view,
+        "capacity": _capacity(body, candidate),
     }

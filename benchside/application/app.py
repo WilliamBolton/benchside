@@ -7,7 +7,6 @@ an ephemeral execution sandbox is deliberately not certified as durable memory.
 
 import hashlib
 import json
-import os
 import uuid
 
 from pydantic import TypeAdapter
@@ -21,6 +20,7 @@ from benchside.domain.export.model.reporting import AppVersion
 from benchside.domain.shared.error import BenchsideError, InvalidStateError, ValidationError
 from benchside.domain.shared.model.gap import Gap
 from benchside.domain.shared.model.ids import PersonaId, user_project_id
+from benchside.domain.shared.model.provenance import AppProvenance
 from benchside.infrastructure.content.loader import YamlPersonaRepository
 from benchside.infrastructure.files import atomic_json, file_lock
 from benchside.infrastructure.journal.projection import (
@@ -28,6 +28,7 @@ from benchside.infrastructure.journal.projection import (
     JournalProjectRepository,
 )
 from benchside.infrastructure.journal.store import JsonlJournal
+from benchside.infrastructure.session_context import recording_context
 
 READ_ACTIONS = {
     "recall",
@@ -264,13 +265,19 @@ class App:
             raise ValidationError("Use the session_id returned by setup for recording")
         validate_session_id(session)
         session_file = self.paths.home / "app-sessions" / f"{session}.json"
-        if session_file.is_file():
-            config = json.loads(session_file.read_text())
-            if config["project_id"] != project_id.root:
-                raise InvalidStateError("This session belongs to another project")
-        previous = os.environ.get("BENCHSIDE_SESSION_ID")
-        os.environ["BENCHSIDE_SESSION_ID"] = session
-        try:
+        if not session_file.is_file():
+            raise InvalidStateError("This session is missing; run setup to resume the project")
+        config = json.loads(session_file.read_text())
+        if config["project_id"] != project_id.root:
+            raise InvalidStateError("This session belongs to another project")
+        with recording_context(
+            session_id=session,
+            provenance=AppProvenance(
+                host=config["host"],
+                app_version=config.get("app_version", "unknown"),
+                surface=config["surface"],
+            ),
+        ):
             if action == "start":
                 persona = self.personas.get(PersonaId(request["role"]))
                 if persona is None:
@@ -372,8 +379,3 @@ class App:
                 "recorded": identifier,
                 "recall": recalled(),
             }
-        finally:
-            if previous is None:
-                os.environ.pop("BENCHSIDE_SESSION_ID", None)
-            else:
-                os.environ["BENCHSIDE_SESSION_ID"] = previous

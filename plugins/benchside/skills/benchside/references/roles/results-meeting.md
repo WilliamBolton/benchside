@@ -45,7 +45,7 @@ Record a results output mapping each main finding to supported claims, uncertain
 
 Record the scientist's chosen interpretation or next analysis and its rationale.
 
-**Before moving on, record it:** run `decision adapter action`.
+**Before moving on, record it:** run `decide adapter action`.
 
 **Move on when:** The scientist agrees the next step.
 

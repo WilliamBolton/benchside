@@ -1,7 +1,9 @@
 """Install shared agent instructions and optional legacy Claude Code project hooks."""
 
+import hashlib
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 from benchside.application.di import create_container
@@ -32,16 +34,32 @@ def _configure_storage(args):
 def _install_app_skill(target: Path):
     from benchside.application.packaging import build_agent_skill
     from benchside.config import resolve_content_root
+    from benchside.infrastructure.files import atomic_json
 
     if (resolve_content_root() / "app").is_dir():
-        build_agent_skill(target / "benchside")
+        _retire_legacy_skills(target)
+        skill = target / "benchside"
+        build_agent_skill(skill)
+        # Preserve the venv executable path: resolving its symlink would lose
+        # the environment's dependencies in a later conversation.
+        atomic_json(
+            skill / "runtime/source.json",
+            {
+                "schema": "benchside.source.v1",
+                "python": str(Path(sys.executable).absolute()),
+                "package_root": str(Path(__file__).resolve().parents[2]),
+            },
+        )
 
 
 def cmd_init(args) -> int:
     project_dir = Path.cwd()
     project_id = runtime.resolve_project(args.project)
     target = _skill_directory(args, project_dir)
-    hooks = args.agent == "claude"
+    legacy = args.legacy_cli
+    if legacy and args.agent != "claude":
+        raise ValueError("--legacy-cli is only available with --agent claude")
+    hooks = legacy
     details = " and register Claude Code session hooks" if hooks else ""
     if not args.yes and not _confirm(
         f"Create .bench/config.yaml, install Benchside into {target}{details}?"
@@ -55,15 +73,20 @@ def cmd_init(args) -> int:
         config.write_text(f"project: {project_id.root}\n", encoding="utf-8")
     if hooks:
         _register_hooks(project_dir / ".claude" / "settings.json")
-        _compile_skills(target)
-    _install_app_skill(target)
+        _compile_skills(target, explicit=True)
+    else:
+        if args.agent == "claude":
+            _remove_hooks(project_dir / ".claude" / "settings.json")
+        _install_app_skill(target)
     print(f"initialized benchside project '{project_id.root}'")
     print(f"  skills: {target}")
     print(f"  local record directory: {runtime.current_paths().home}")
     print("Optional submissions require separate consent and an approved preview.")
-    print(
-        "Ask Benchside to choose storage and select or create a research project before recording."
-    )
+    if legacy:
+        print("Legacy role commands are explicit-invocation-only and keep their existing CLI journal.")
+    else:
+        print("Ask Benchside to select existing app records before creating a new research project.")
+        print("Legacy CLI journals are preserved separately; choose continuation or migration explicitly.")
     return 0
 
 
@@ -101,7 +124,55 @@ def _register_hooks(settings_path: Path) -> None:
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
 
 
-def _compile_skills(target_dir: Path) -> None:
+def _remove_hooks(settings_path: Path) -> None:
+    """Remove only Benchside-tagged lifecycle hooks when selecting the shared route."""
+    if not settings_path.is_file():
+        return
+    settings = json.loads(settings_path.read_text(encoding="utf-8") or "{}")
+    changed = False
+    for event, groups in settings.get("hooks", {}).items():
+        retained = [group for group in groups if group.get(_TAG) != "v1"]
+        if len(retained) != len(groups):
+            settings["hooks"][event] = retained
+            changed = True
+    if changed:
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
+def _explicit_skill(text: str) -> str:
+    return text.replace("---\n", "---\ndisable-model-invocation: true\n", 1)
+
+
+def _retire_legacy_skills(target: Path) -> None:
+    """Only recognize exact generated content, including known earlier release digests."""
+    from benchside.config import resolve_content_root
+
+    known = resolve_content_root() / "legacy-skill-digests.json"
+    historical = json.loads(known.read_text()) if known.is_file() else {}
+    with tempfile.TemporaryDirectory(prefix="benchside-legacy-check-") as temporary:
+        expected = Path(temporary)
+        _compile_skills(expected)
+        for original in expected.glob("*/SKILL.md"):
+            installed = target / original.relative_to(expected)
+            if (
+                not installed.is_file()
+                or installed.is_symlink()
+                or installed.parent.is_symlink()
+            ):
+                continue
+            text = installed.read_text(encoding="utf-8")
+            if text == original.read_text(encoding="utf-8") or (
+                hashlib.sha256(text.encode()).hexdigest() in historical.get(original.parent.name, [])
+            ):
+                installed.write_text(_explicit_skill(text), encoding="utf-8")
+            elif not text.startswith("---\ndisable-model-invocation: true\n"):
+                print(
+                    f"Preserved custom skill at {installed}; "
+                    "review its invocation before using both routes."
+                )
+
+
+def _compile_skills(target_dir: Path, *, explicit: bool = False) -> None:
     """Compile personas straight into the project's skill directory."""
     container = create_container()
     with container, container(scope=Scope.UOW) as uow:
@@ -115,10 +186,19 @@ def _compile_skills(target_dir: Path) -> None:
     import shutil
 
     from benchside.config import resolve_content_root
+    from benchside.infrastructure.content.loader import YamlPersonaRepository
 
     sharing_skill = resolve_content_root() / "claude" / "bench-share"
     if sharing_skill.is_dir():  # Custom authoring roots may contain only personas.
         shutil.copytree(sharing_skill, target_dir / "bench-share", dirs_exist_ok=True)
+    if explicit:
+        names = {
+            persona.id.root
+            for persona in YamlPersonaRepository(resolve_content_root() / "personas").list_all()
+        } | {"bench-share"}
+        for path in target_dir.glob("*/SKILL.md"):
+            if path.parent.name in names:
+                path.write_text(_explicit_skill(path.read_text(encoding="utf-8")), encoding="utf-8")
 
 
 def cmd_setup(args) -> int:

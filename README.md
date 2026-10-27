@@ -57,7 +57,7 @@ hypotheses, targeted critiques and resolutions, decisions with rationale,
 role-specific scientific outputs with sources, and local workflow observations.
 It restores the project record and unfinished sittings when you return.
 
-Local Claude Code hooks also inject recall and archive transcripts. Session
+Optional legacy Claude Code hooks inject recall and archive transcripts. Session
 identity is passed to each conversation's shell, so concurrent conversations
 are not all attributed to whichever one started last.
 
@@ -115,17 +115,23 @@ bench setup
 bench init
 ```
 
-The default commands retain the legacy Claude Code setup. For Codex use
+The default commands install one shared entry for all seven roles. For Codex use
 `bench setup --agent codex`; for another agent use `bench setup --agent generic
 --skills-dir <its skill directory>`. The shared Benchside skill includes every
-role and uses `bench app`, with no Claude hooks required. An agent can perform
+role and an entry script that remembers its source runtime, with no Claude hooks required.
+Later conversations can use it outside the checkout without `bench` on PATH. If the
+source environment is moved or removed, the agent can reinstall it and rerun setup
+for the same skill location; research storage stays separate. An agent can perform
 these steps for the researcher. `--storage /absolute/chosen/folder` remembers an
 explicit local choice; native or connected memory is chosen through guided setup.
 
-`bench init` retains the optional Claude Code project identity, per-role skills
-and session hooks. `bench init --agent codex` or `--agent generic` installs the
-shared skill without Claude settings. Legacy CLI project journals are separate
-from app project IDs; setup does not silently migrate them.
+`bench init` installs the shared skill without transcript hooks. For explicit
+legacy Claude Code role commands and session hooks, use `bench init --legacy-cli`;
+those role skills require explicit invocation. Shared setup marks only recognized,
+unedited generated legacy skills this way and preserves customized skills.
+Legacy CLI project journals are separate from app project IDs. Choose to continue
+an existing CLI journal or explicitly migrate it before starting an app project;
+setup does not silently migrate or merge records.
 
 ```text
 sitting open|resume|status|close   manage a research discussion
@@ -157,9 +163,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.1.1.zip` (standalone skill),
-`dist/benchside-plugin-0.1.1.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.1.1.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.1.2.zip` (standalone skill),
+`dist/benchside-plugin-0.1.2.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.1.2.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

@@ -12,16 +12,20 @@ connected document storage. Do not install a cloud connector or create an accoun
 without the researcher's request. A connector being installed does not prove it
 can write or safely update records. Ordinary chat memory is not a journal.
 
-For a packaged skill with `runtime/manifest.json`, invoke its bundled
-`scripts/benchside_app.py`. For a source/CLI installation, use `bench app` (or the
-installed environment's `bench` executable). Both accept the same JSON on stdin
+For an installed skill, invoke `scripts/benchside_app.py`. A packaged skill uses
+`runtime/manifest.json`; source setup saves `runtime/source.json` with the original
+Python environment and source location, so later conversations can run it outside
+the checkout without `bench` on PATH. If that saved environment or source was moved
+or removed, restore/reinstall it and rerun `bench setup` for the same skill location.
+Do this through the agent; the researcher need not run repair commands. All routes accept the same JSON on stdin
 and return the same JSON result. Pass input through the execution tool, not shell
 interpolation. The researcher should not have to type commands.
 
 If starting from a Git checkout, the agent can install the project using its
 available Python package manager (for example `uv sync --frozen`) and invoke
-`uv run bench app`. For discovery in later conversations, `bench setup --agent
-codex` installs the shared skill in `~/.agents/skills`; `--agent claude` installs
+`uv run bench app`. For discovery and runtime access in later conversations,
+`uv run bench setup --agent codex` installs the shared skill in `~/.agents/skills`;
+`--agent claude` installs
 it in `~/.claude/skills` with the legacy `/bench-init` helper. For another host,
 use `--agent generic --skills-dir <its observed skill directory>`. If it cannot
 automatically discover skills, tell the researcher to reference the installed
@@ -76,6 +80,12 @@ Never merge by title. When returning, pass the selected `project_id` to `setup`;
 this reuses the same journal regardless of the app. For new local projects pass a
 stable `project_key` (an actual project ID or absolute research folder) and a
 human-readable `title`. Native setup registers the actual journal document ID.
+
+Legacy CLI journals are separate from app projects. If the researcher is returning
+to earlier CLI work, continue that journal explicitly or agree a migration first;
+do not create an empty app project and call it restored. Shared setup preserves
+existing journals and custom role skills. Recognized generated legacy skills
+become explicit-invocation-only, so automatic role selection uses this shared flow.
 
 Keep the returned session ID for this conversation. Record the selected notebook
 locator in the host's durable setup context, not just in the execution sandbox.
