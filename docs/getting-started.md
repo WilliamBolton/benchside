@@ -19,8 +19,8 @@ for the Git/terminal route. A plugin packages skills and their supporting runtim
 | Claude plugin | `benchside-claude-plugin-0.1.1.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
 | Claude standalone skill | `benchside-claude-0.1.1.zip` remains available for custom-skill installation. |
 
-The expanded implementation is on the local review branch. Published main does
-not yet contain these changes. No public plugin listing has been published.
+The expanded implementation is in [draft PR #5](https://github.com/science-works/benchside/pull/5).
+Published main does not yet contain these changes. No public plugin listing has been published.
 Package validation does not replace installation, discovery and fresh-chat memory
 checks in the intended app/account.
 
@@ -82,10 +82,14 @@ Three scientific overclaims did not recur after the installed role corrections;
 one final reproducibility wording fix and setup-guide clarification are rebuilt
 but not yet installed. Both apps passed submission-failure recovery and consent
 withdrawal, but HTTP 403 blocked delivery before the temporary Worker. Claude's
-Google connector remains unconnected; cross-app Google continuity is untested.
+Google connector is now connected with specific-file access only, but lacks
+guarded document-content updates and cannot serve as Benchside memory. ChatGPT's
+installed plugin passed Google notebook restoration, update and independent
+readback on 27 October. Cross-app Google continuity has not passed.
 Claude's native Docs tools do not expose sharing permissions, so a private sharing
 state must be verified in the UI. Other accounts/connectors still need acceptance.
-See the [test results and remaining issues](acceptance-2026-10-23.md).
+See the [27 October release review](release-review-2026-10-27.md) and
+[earlier installed-app tests](acceptance-2026-10-23.md).
 If a connector only searches or reads files, setup explains why it cannot keep a
 journal there and offers another available location. No Google connector or
 storage credentials are bundled into Benchside.

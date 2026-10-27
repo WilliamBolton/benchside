@@ -10,6 +10,9 @@ The Benchside PR includes the existing session-stamping commit from Rory's PR #4
 preserving its authorship. Coordinate that dependency before merging. The new
 client and receiver changes are reviewed together against the same JSON contracts.
 
+Draft PRs: [Benchside #5](https://github.com/science-works/benchside/pull/5)
+and [receiver #1](https://github.com/science-works/benchside-ingest/pull/1).
+
 | Area examined | Checks and boundary |
 | --- | --- |
 | Consent and exact submission | Off by default; separate grants; draft digest and destination checked at send time; withdrawal/regrant invalidates approvals; verified receipt required; retries retain approved bytes. |
@@ -38,6 +41,34 @@ it is not an independent reviewer approval or a scientific validation study.
 - The staging deployment dry run built successfully and listed only the five
   separate `-staging` EU buckets. It did not create those buckets or deploy a Worker.
 - The CI action tags were checked against their upstream GitHub repositories.
+- GitHub CI passed for both Python versions, including all three archive checks,
+  on [client commit 65298b2](https://github.com/WilliamBolton/benchside/actions/runs/40491761874).
+  This run is on the contributor fork; the upstream PR currently has no check run.
+  [Receiver CI](https://github.com/science-works/benchside-ingest/actions/runs/40491814497)
+  also passed for commit e3515aa.
+
+## Installed-app Google storage check
+
+ChatGPT's installed 0.1.0 plugin restored the existing private synthetic Google
+notebook in a fresh conversation, continued the same project and methods sitting,
+and saved a new decision in one guarded batch. The notebook advanced from revision
+8 to 9. The readable journal was updated and read back. An independent connector
+read and runtime restore verified the digest, decision, project identity and
+remembered participation deferral. No submission endpoints were called.
+
+Claude's Google connector was connected with the user's approved specific-file
+scope only; account-wide Drive reading remains off. Its exposed tools have no
+guarded document-content update or conditional object replacement. Metadata-only
+updates and creation of new files do not meet Benchside's memory contract. Reads
+of the two named synthetic documents returned "Requested entity not found";
+file selection/access is therefore also unresolved. The test made no Drive
+changes and did not search other files.
+
+This Claude Google connector is not a supported memory route. Broader read access
+would not supply the missing write capability. Cross-app Google continuity has
+not passed; use each app's tested native storage, or a shared local store for
+agents with filesystem access. A different cloud connector must first pass the
+complete-read, privacy, conditional-write and readback checks.
 
 ## Host and release gates
 
@@ -46,17 +77,12 @@ native memory and scientific-role tests. Both installed apps still need the
 0.1.1 upload; automated Chrome uploads report unavailable file-URL access.
 The versioned ZIPs are in `dist/` and will also be produced by the PR's build job.
 
-Claude's Google connector is now connected with the user's approved specific-file
-scope only. Account-wide Drive read access was left off. The installed-app Google
-capability/continuity checks are recorded separately when they finish; connector
-connection alone is not proof of a safe shared notebook.
-
 Before outreach:
 
 1. Complete installation and the final reproducibility wording retest in both apps.
-2. Verify the exact Google route offered to users, including file selection,
-   complete reads, private access, conditional writes, readback and resumption.
-   Keep unsupported routes out of the supported-path claim.
+2. Offer Google memory only through the tested ChatGPT tools or another connector
+   that passes the same checks. Keep the current Claude Google connector out of
+   the supported-path claim; native Claude memory remains available.
 3. Provision Science Works staging after access is granted, deploy the receiver
    there and obtain real receipts from Claude and ChatGPT. Diagnose any gateway
    or edge HTTP 403 without weakening unrelated network protections.

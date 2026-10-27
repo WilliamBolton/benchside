@@ -40,11 +40,15 @@ a transcript field (422), and revocation before sending. It used only a temporar
 local Worker and synthetic records; the review branch's public catalog is empty.
 
 This is not yet an outreach-ready cloud release. The final small package update,
-cross-app Google connector continuity, broader scientific response quality and
-successful in-app staging delivery remain checks below. Claude's Google connector
-is not connected, and its native Docs tools cannot verify sharing permissions;
-the private state was checked in the UI. No hosted journal service has been added,
-and deployment of the new collector routes remains outstanding.
+broader scientific response quality and successful in-app staging delivery remain
+checks below. On 27 October, the installed ChatGPT plugin restored and updated the
+existing Google notebook; independent readback confirmed the saved decision and
+unchanged project identity. Claude's Google connector is now connected with
+specific-file access only, but lacks guarded content updates, so that connector
+is not a supported memory route and cross-app Google continuity has not passed.
+Claude's native Docs tools cannot verify sharing permissions; the private state
+was checked in the UI. No hosted journal service has been added, and deployment
+of the new collector routes remains outstanding.
 
 On 22 October, read-only requests from this environment to the public `/v1/gaps`,
 `/v1/feedback` and `/v1/studies` addresses returned HTTP 403 / Cloudflare error 1010
