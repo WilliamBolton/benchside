@@ -9,7 +9,6 @@ import json
 
 from benchside.domain.consultation.event.opened import ConsultationOpened
 from benchside.domain.shared.model.ids import PersonaId, ProjectId
-from benchside.infrastructure.journal.store import JsonlJournal
 from benchside.infrastructure.session_context import current_session, register_session
 
 PID = ProjectId("stamped")

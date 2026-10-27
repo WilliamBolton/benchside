@@ -11,10 +11,27 @@ same id names Claude Code's own record in ~/.claude/projects/.
 """
 
 import json
+import math
 import os
+import re
+import shlex
+import time
+from pathlib import Path
 
 from benchside.config import Paths
+from benchside.domain.shared.error import InvalidStateError
 from benchside.domain.shared.model.ids import ProjectId
+from benchside.infrastructure.files import atomic_json, file_lock
+
+# Anonymous fallback expires after 24 hours without explicit activity.
+# Explicit activity refreshes only a known registration, never an ended one.
+_REGISTRATION_LIFETIME_SECONDS = 24 * 60 * 60
+
+
+def validate_session_id(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", value):
+        raise InvalidStateError("Invalid session identifier")
+    return value
 
 
 def _session_file(paths: Paths, project_id: ProjectId):
@@ -22,28 +39,158 @@ def _session_file(paths: Paths, project_id: ProjectId):
 
 
 def register_session(paths: Paths, project_id: ProjectId, session_id: str) -> None:
+    validate_session_id(session_id)
     path = _session_file(paths, project_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"session_id": session_id}), encoding="utf-8")
+    with file_lock(path.with_suffix(".lock")):
+        sessions = _registered(path)
+        sessions[session_id] = time.time()
+        _prune_expired(paths, project_id, sessions)
+        _save_registered(path, sessions)
+    # Each Claude session has its own environment file. This avoids the
+    # last-started-session race of a shared per-project current-session file.
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    if env_file:
+        with Path(env_file).open("a", encoding="utf-8") as handle:
+            handle.write(f"\nexport CLAUDE_SESSION_ID={shlex.quote(session_id)}\n")
 
 
 def clear_session(paths: Paths, project_id: ProjectId, session_id: str) -> None:
-    """Remove the registration, but only if it is still ours — a newer
-    session on the same project must not be clobbered by our exit."""
+    """Retire only this project's named conversation; preserve its journal."""
+    validate_session_id(session_id)
     path = _session_file(paths, project_id)
-    try:
-        if json.loads(path.read_text(encoding="utf-8")).get("session_id") == session_id:
-            path.unlink(missing_ok=True)
-    except (OSError, json.JSONDecodeError):
-        pass
+    with file_lock(path.with_suffix(".lock")):
+        sessions = _registered(path)
+        retire_session_pointer(paths, session_id, project_id=project_id)
+        sessions.pop(session_id, None)
+        _save_registered(path, sessions)
+
+
+def clear_project_sessions(paths: Paths, project_id: ProjectId) -> None:
+    """Used when removing lifecycle hooks; never clear another project's state."""
+    path = _session_file(paths, project_id)
+    with file_lock(path.with_suffix(".lock")):
+        for session_id in _registered(path):
+            retire_session_pointer(paths, session_id, project_id=project_id)
+        path.unlink(missing_ok=True)
+
+
+def retire_session_pointer(
+    paths: Paths, session_id: str, *, project_id: ProjectId | None = None
+) -> dict | None:
+    """Keep unfinished work available for explicit resumption, never adoption."""
+    validate_session_id(session_id)
+    path = paths.home / "sessions" / f"{session_id}.json"
+    with file_lock(path.with_suffix(".lock")):
+        if not path.is_file():
+            return None
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            record = {}
+        if not isinstance(record, dict):
+            record = {}
+        if project_id is not None and record.get("project_id") != project_id.root:
+            return None
+        path.replace(path.with_suffix(".ended"))
+        return record
 
 
 def current_session(paths: Paths, project_id: ProjectId) -> str | None:
-    env = os.environ.get("CLAUDE_SESSION_ID")
+    env = os.environ.get("BENCHSIDE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
     if env:
-        return env
+        session_id = validate_session_id(env)
+        _refresh_registered(paths, project_id, session_id)
+        return session_id
     path = _session_file(paths, project_id)
+    with file_lock(path.with_suffix(".lock")):
+        sessions = _registered(path)
+        if _prune_expired(paths, project_id, sessions):
+            _save_registered(path, sessions)
+    if len(sessions) > 1:
+        raise InvalidStateError(
+            "Several conversations are active; a session identifier is required to record safely",
+            hint=(
+                "Use this conversation's CLAUDE_SESSION_ID or BENCHSIDE_SESSION_ID. "
+                f"Registered IDs: {', '.join(sorted(sessions))}. If one has ended, ask your agent "
+                f"to run `bench session clear --project {shlex.quote(project_id.root)} "
+                "--session <ended-session-id>`. This preserves its research records."
+            ),
+        )
+    return next(iter(sessions), None)
+
+
+def _refresh_registered(paths: Paths, project_id: ProjectId, session_id: str) -> None:
+    """Keep explicit activity alive without enrolling another project/session."""
+    path = _session_file(paths, project_id)
+    if not path.is_file():
+        return
+    with file_lock(path.with_suffix(".lock")):
+        try:
+            sessions = _registered(path)
+        except InvalidStateError:
+            # Explicit identity still works while a damaged registry awaits
+            # repair. Never overwrite it or infer missing registrations.
+            return
+        if session_id in sessions:
+            sessions[session_id] = time.time()
+            _save_registered(path, sessions)
+
+
+def _registered(path: Path) -> dict[str, float]:
     try:
-        return json.loads(path.read_text(encoding="utf-8")).get("session_id")
-    except (OSError, json.JSONDecodeError):
-        return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise TypeError("expected a registration object")
+        names_raw = data.get("sessions", [])
+        if not isinstance(names_raw, list):
+            raise TypeError("sessions must be a list of conversation IDs")
+        # Older registrations had no timestamps. Their last file write is a
+        # bounded migration fallback, never renewed merely by reading them.
+        legacy_timestamp = path.stat().st_mtime
+        names = {validate_session_id(s) for s in names_raw} | (
+            {validate_session_id(data["session_id"])} if "session_id" in data else set()
+        )
+        timestamps = data.get("registered_at", {name: legacy_timestamp for name in names})
+        if not isinstance(timestamps, dict) or set(timestamps) != names:
+            raise ValueError("timestamps must match the registered conversation IDs")
+        result = {}
+        now = time.time()
+        for name in names:
+            timestamp = timestamps[name]
+            if (
+                isinstance(timestamp, bool)
+                or not isinstance(timestamp, (int, float))
+                or timestamp < 0
+                or timestamp > now
+                or not math.isfinite(timestamp)
+            ):
+                raise ValueError("timestamps must be finite past or present Unix times")
+            result[name] = float(timestamp)
+        return result
+    except FileNotFoundError:
+        return {}
+    except (TypeError, ValueError, InvalidStateError) as error:
+        raise InvalidStateError(
+            "Invalid Benchside conversation registrations; recording is paused",
+            hint=(
+                f"Ask your agent to inspect and repair {path}, preserving active conversation "
+                "IDs and their original timestamps. Do not delete scientific journals. "
+                "An explicit conversation ID can still identify the current conversation."
+            ),
+        ) from error
+
+
+def _save_registered(path: Path, sessions: dict[str, float]) -> None:
+    if sessions:
+        atomic_json(path, {"sessions": sorted(sessions), "registered_at": sessions})
+    else:
+        path.unlink(missing_ok=True)
+
+
+def _prune_expired(paths: Paths, project_id: ProjectId, sessions: dict[str, float]) -> bool:
+    cutoff = time.time() - _REGISTRATION_LIFETIME_SECONDS
+    expired = [name for name, timestamp in sessions.items() if timestamp <= cutoff]
+    for name in expired:
+        retire_session_pointer(paths, name, project_id=project_id)
+        del sessions[name]
+    return bool(expired)
