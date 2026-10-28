@@ -21,9 +21,12 @@ jobs:
       - run: uv run bench compile --check
       - run: uv build --wheel
       - run: uv run --with pip python scripts/build_release.py
-      - run: python scripts/smoke_release.py dist/benchside-claude-0.1.3.zip
-      - run: python scripts/smoke_release.py dist/benchside-claude-plugin-0.1.3.zip
-      - run: python scripts/smoke_release.py dist/benchside-plugin-0.1.3.zip
+      - name: Check all release archives
+        run: |
+          benchside_version="$(uv run --frozen python -c 'from benchside import __version__; print(__version__)')"
+          for benchside_package in benchside-claude benchside-claude-plugin benchside-plugin; do
+            uv run --frozen python scripts/smoke_release.py "dist/${benchside_package}-${benchside_version}.zip"
+          done
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: benchside-python-${{ matrix.python }}
