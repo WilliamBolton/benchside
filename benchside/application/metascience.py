@@ -13,22 +13,28 @@ from urllib.error import URLError
 from urllib.request import Request
 
 from benchside import __version__
+from benchside.application.contributions import POLICY, contributor_id
 from benchside.application.submission_failures import record_submission_failure
 from benchside.domain.export.model.metascience import (
     MANUAL_SAMPLING,
     RANDOM_SAMPLING,
     ActivityObservation,
-    ActivityPayload,
     Candidate,
     Classification,
+    LinkedActivityPayload,
+    LinkedSurveyPayload,
     MetaDraft,
     MetaState,
     Sample,
     Scope,
+    SelectedProblem,
     StudyCatalog,
+    StudyParticipation,
     SurveyPayload,
     canonical,
     digest,
+    parse_activity,
+    parse_survey,
 )
 from benchside.domain.shared.error import ConsentRequiredError, InfrastructureError, ValidationError
 from benchside.infrastructure.files import atomic_json
@@ -88,6 +94,14 @@ class Metascience:
         if any(choice not in self.state.grants for choice in choices):
             raise ConsentRequiredError(
                 "This optional metascience choice is off; nothing was shared"
+            )
+        if "analysis" in choices and self.state.analysis_policy != "selected-research-max20-1":
+            raise ConsentRequiredError(
+                "Explain and accept the updated analysis policy: up to 20 research conversations per completed week, selected randomly or by the researcher"
+            )
+        if "sharing" in choices and self.state.sharing_policy != POLICY:
+            raise ConsentRequiredError(
+                "Explain and accept pseudonymous sharing before linking activity contributions"
             )
         return {choice: self.state.grants[choice] for choice in choices}
 
@@ -179,14 +193,20 @@ class Metascience:
             ],
             "limits": {"invitation_days": 7, "sessions_per_week": 20},
             "sampling_window": self._sampling_window(),
+            "analysis_policy": self.state.analysis_policy,
+            "sharing_policy": self.state.sharing_policy,
         }
 
     def consent(self, choice, enabled):
         if choice not in {"invitations", "analysis", "sharing"} or type(enabled) is not bool:
             raise ValidationError("Choose invitations, analysis or sharing and true or false")
         grants = dict(self.state.grants)
+        policy_changed = (
+            choice == "analysis" and self.state.analysis_policy != "selected-research-max20-1"
+        ) or (choice == "sharing" and self.state.sharing_policy != POLICY)
         if enabled:
-            grants.setdefault(choice, uuid.uuid4().hex)
+            if policy_changed or choice not in grants:
+                grants[choice] = uuid.uuid4().hex
         else:
             grants.pop(choice, None)
         reset_scopes = choice == "analysis" and (not enabled or "analysis" not in self.state.grants)
@@ -205,6 +225,10 @@ class Metascience:
         self._save(
             grants=grants,
             scopes=[] if reset_scopes else self.state.scopes,
+            analysis_policy="selected-research-max20-1"
+            if choice == "analysis" and enabled
+            else self.state.analysis_policy,
+            sharing_policy=POLICY if choice == "sharing" and enabled else self.state.sharing_policy,
             **retired,
         )
         return self.status()
@@ -326,16 +350,52 @@ class Metascience:
         key = f"survey:{study_key}"
         previous = self.state.drafts.get(self.state.latest.get(key))
         response_id = json.loads(previous.payload)["response_id"] if previous else uuid.uuid4().hex
-        payload = SurveyPayload(
+        accepted = self.state.participation.get(study_key)
+        payload_type = LinkedSurveyPayload if accepted else SurveyPayload
+        if accepted and (
+            accepted.invitation_grant != grants["invitations"]
+            or accepted.study_sha256 != digest(study.model_dump())
+            or accepted.destination != self._sink("surveys").destination
+        ):
+            raise ConsentRequiredError(
+                "Survey participation changed; explain and accept the study again"
+            )
+        payload = payload_type(
             benchside_version=__version__,
             response_id=response_id,
             study_id=study.id,
             study_version=study.version,
             study_sha256=digest(study.model_dump()),
             answers=answers,
+            **({"contributor_id": accepted.contributor_id} if accepted else {}),
         )
         payload.check_study(study)
         return self._preview("surveys", key, payload, grants)
+
+    def join_study(self, study_key, study_sha256):
+        """Record agreement before answers; answering then authorises their submission."""
+        grants = self._require("invitations")
+        study = self.state.studies.get(study_key)
+        if (
+            not study
+            or not study.active(self.today.isoformat())
+            or study_key in self.state.completed
+            or study_sha256 != digest(study.model_dump())
+        ):
+            raise ConsentRequiredError("Accept an available study and its exact current definition")
+        accepted = StudyParticipation(
+            study_sha256=study_sha256,
+            invitation_grant=grants["invitations"],
+            destination=self._sink("surveys").destination,
+            contributor_id=contributor_id(self.paths),
+        )
+        self._save(participation={**self.state.participation, study_key: accepted})
+        return {
+            "study_key": study_key,
+            "participating": True,
+            "answer_submission": "Answers supplied for this study may be sent without a second approval",
+            **accepted.model_dump(),
+        }
 
     def sample(self, candidates, *, week=None, selection=None):
         self._require("analysis")
@@ -431,6 +491,24 @@ class Metascience:
         )
         return {"recorded": token, "week": week}
 
+    def record_gap(self, week, token, gap, basis):
+        sample = self._sample(week)
+        if token not in sample.selected:
+            raise ValidationError("Only selected conversations can contribute candidate problems")
+        problem = SelectedProblem(id=uuid.uuid4().hex, gap=gap, basis=basis)
+        existing = sample.problems.get(token, [])
+        for previous in existing:
+            if previous.gap == problem.gap and previous.basis == problem.basis:
+                return {"recorded": previous.id, "week": week}
+        data = sample.model_dump()
+        data["problems"][token] = [*existing, problem]
+        self._save(samples={**self.state.samples, week: Sample.model_validate(data)})
+        return {
+            "recorded": problem.id,
+            "week": week,
+            "next": "Review this candidate through sharing.preview for channel gaps",
+        }
+
     def preview_activity(self, week, tokens=None):
         grants = self._require("analysis", "sharing")
         sample = self._sample(week)
@@ -448,7 +526,8 @@ class Metascience:
             )
             for t in selected
         ]
-        payload = ActivityPayload(
+        payload = LinkedActivityPayload(
+            contributor_id=contributor_id(self.paths),
             benchside_version=__version__,
             batch_id=sample.id,
             revision=sample.revision + 1,
@@ -462,7 +541,7 @@ class Metascience:
         key = f"activity:{week}"
         previous = self.state.drafts.get(self.state.latest.get(key))
         if previous:
-            prior = ActivityPayload.model_validate_json(previous.payload)
+            prior = parse_activity(previous.payload)
             if payload.model_copy(update={"revision": prior.revision}) == prior:
                 payload = prior
         data = sample.model_dump()
@@ -495,7 +574,20 @@ class Metascience:
             study = self.state.studies[key]
             if not study.active(self.today.isoformat()) or key in self.state.completed:
                 raise ConsentRequiredError("The survey has closed or was dismissed")
-            SurveyPayload.model_validate_json(draft.payload).check_study(study)
+            payload = parse_survey(draft.payload)
+            payload.check_study(study)
+            if isinstance(payload, LinkedSurveyPayload):
+                accepted = self.state.participation.get(key)
+                if (
+                    not accepted
+                    or accepted.study_sha256 != payload.study_sha256
+                    or accepted.invitation_grant != draft.grants["invitations"]
+                    or accepted.destination != sink.destination
+                    or accepted.contributor_id != payload.contributor_id
+                ):
+                    raise ConsentRequiredError(
+                        "Study participation no longer matches these answers"
+                    )
         receipt = sink.send(draft.payload)
         if receipt is None:
             raise InfrastructureError(
@@ -529,6 +621,8 @@ class Metascience:
                 )
             case "metascience.survey":
                 return self.survey(request["study_key"], request["answers"])
+            case "metascience.join_study":
+                return self.join_study(request["study_key"], request["study_sha256"])
             case "metascience.sample":
                 return self.sample(
                     request["candidates"],
@@ -539,6 +633,10 @@ class Metascience:
                 return self.batch(request["week"])
             case "metascience.record":
                 return self.record(request["week"], request["token"], request["classification"])
+            case "metascience.gap":
+                return self.record_gap(
+                    request["week"], request["token"], request["gap"], request["basis"]
+                )
             case "metascience.preview":
                 return self.preview_activity(request["week"], request.get("tokens"))
             case "metascience.send":

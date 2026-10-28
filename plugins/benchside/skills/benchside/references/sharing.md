@@ -7,21 +7,33 @@ Declining or deciding later leaves unchosen options off; do not repeatedly promp
 on return. At natural stopping points, offer reviews for enabled choices.
 
 1. Workflow observations: edited descriptions of missing tools, hard-to-find data,
-   repeated manual work, dead ends and missing indexes. No project or installation IDs.
+   repeated manual work, dead ends and missing indexes. No project or conversation IDs.
 2. Feedback: the researcher's ease-of-use rating (1–5), whether they would use
    Benchside again (`yes`, `no`, `unsure`), and an optional comment. Never infer a
-   rating from their conversation. No installation, sitting or gap identifiers.
+   rating from their conversation. No sitting or gap identifiers.
 3. Usage: weekly consultation counts, role/app/version information and standardised
    failure counts. A random persistent installation ID estimates returning use.
    No research text, project titles, conversation IDs or exact activity times.
    Optional, self-reported discipline and career-stage categories are included
    only with the separate profile choice below.
 
-Before preparing any free-text observation or feedback comment, remove scientific
+New sharing includes one random contributor ID per private Benchside store,
+reused from the usage installation ID. Explain before consent that Science Works
+can group this store's contributions across channels and over time, including
+previous usage reports with that ID. It is pseudonymous, not anonymous or a
+verified person. No account email/name is requested. Existing unlinked grants
+need a renewed explicit choice (`sharing.status.needs_policy_renewal`); do not
+silently upgrade them. Multiple apps using the same store share the ID; separate
+stores have separate IDs. Legacy received observations are not retroactively linked.
+
+Before preparing any model-derived free-text observation or feedback comment, remove scientific
 results, hypotheses, measurements, identifying sample/data details, detailed
 protocols or analyses, source passages and project-specific names. Describe the
 general workflow need instead, or omit the item if generalising it would change
-its meaning. Sharing consent does not make these research details eligible.
+its meaning. Public software/dataset names, versions and general failure details
+may remain: “Fiji 2.16 loses channel names on export” is useful workflow information.
+Private findings and identifying research details remain excluded. Researcher-written
+survey answers follow their accepted study agreement and are preserved as written.
 The format permits free text, so automatic identifier scrubbing cannot enforce
 this boundary by itself; the assistant must check the content before preview.
 
@@ -51,8 +63,8 @@ stops future submissions; it does not delete previously received data.
   batches that were not reviewed. A rejected or uncertain submission stays pending.
   Retry the same draft after a network failure; do not regenerate it to retry.
 - `sharing.history` returns receipts. Give the researcher the channel, digest and
-  received date for an operator-assisted removal request. Usage can additionally
-  be located with their installation ID. Do not send a removal request yourself
+  received date for an operator-assisted removal request. New contributions can additionally
+  be located with their random contributor ID. Do not send a removal request yourself
   unless the researcher explicitly asks.
 
 Usage reports are cumulative weekly snapshots. Repeated reporting replaces older
@@ -98,4 +110,5 @@ random installation ID. They never enter gap observations, feedback, survey or
 activity payloads. Changing or disabling the profile invalidates pending usage
 drafts; make a new preview and obtain approval. It does not erase reports already
 received. Aggregate reports count the latest accepted profile per participating
-installation, without linking individual observations or feedback to it.
+store. New pseudonymous contributions can be grouped with it internally; published
+reports should contain aggregate counts, not identifiers or raw responses.

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from dataclasses import field
 from datetime import UTC, datetime
 
 from benchside.domain.export.event.observations_exported import ObservationsExported
@@ -29,6 +30,9 @@ class ExportService(Service):
     sink: ExportSink
     ledger: ConsentRepository
     journal: Journal
+    # Set by the sharing adapter only after the linked-sharing policy is accepted.
+    # This is configuration, not a dependency for the legacy CLI composition root.
+    contributor_id: str | None = field(default=None, init=False)
 
     def preview(self, *, only=None, edits=None) -> ExportPreview:
         previews = self.previews(only=only, edits=edits)
@@ -59,6 +63,8 @@ class ExportService(Service):
             if gap["kind"] != observation.gap.kind:
                 raise ValidationError("An edit cannot change an observation's kind")
             item = {"id": observation.id, "gap": gap}
+            if self.contributor_id:
+                item.update(origin=observation.origin, basis=observation.basis)
             candidate = self.redactor.apply(self._payload(batch + [item]))
             if batch and (
                 len(batch) == MAX_OBSERVATIONS or len(candidate.encode("utf-8")) > MAX_BYTES
@@ -146,10 +152,13 @@ class ExportService(Service):
             received_at=event.received_at,
         )
 
-    @staticmethod
-    def _payload(observations: list[dict]) -> str:
+    def _payload(self, observations: list[dict]) -> str:
         return json.dumps(
-            {"schema": "benchside.gaps.v1", "observations": observations},
+            {
+                "schema": "benchside.gaps.v2" if self.contributor_id else "benchside.gaps.v1",
+                **({"contributor_id": self.contributor_id} if self.contributor_id else {}),
+                "observations": observations,
+            },
             ensure_ascii=False,
             indent=2,
         )

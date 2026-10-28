@@ -23,18 +23,24 @@ completed week. Both methods share one fixed batch and one cap of 20 per observe
 week; a researcher cannot switch methods to redraw it. The host assistant
 classifies only those sessions. This works without using
 one of the seven research roles. The assistant prepares a weekly review showing
-activity, obstacles, verification and reported usefulness. Researchers can
+workflow gaps first, with activity, obstacles, verification and reported usefulness
+as supporting context. Researchers can
 correct or exclude findings before approving a submission. No logs, research
-text, project IDs, conversation IDs or installation IDs appear in that submission.
+records, project IDs or conversation IDs appear in model-derived submissions.
+New contributions carry the random store ID after the linking explanation is accepted.
 An outcome is explicitly reported by the researcher or marked not reported;
 the assistant cannot declare scientific success based on task completion.
 
 Invitations arrive on a return visit or an explicitly configured native scheduled
 check. At most one new invitation appears per seven days. Each study explains
-purpose, use and retention; all questions may be skipped. This first version
-supports categorical answers only. Skip suppresses that version; “don't ask
+purpose, use, retention and pseudonymous linking. Agreement comes before
+questions; answers are submitted without a second approval prompt. Questions may
+be skipped. Fixed choices and bounded free text are supported; researcher-written
+answers are preserved exactly, without inferred additions. Skip suppresses that version; “don't ask
 again” suppresses every version of the study. Turning invitations off stops all
-future checks. A central catalog supports new surveys without a client reinstall.
+future checks. A central catalog supports new surveys within the installed client's supported
+question types. Update older clients to 0.2.0 before publishing the first text
+question; 0.1.x clients reject unsupported catalog fields rather than misread them.
 
 ## What runs where
 
@@ -44,7 +50,7 @@ future checks. A central catalog supports new surveys without a client reinstall
 | Benchside adapter | Persist consent/scopes, enforce invitation limits and sampling, validate categories, reject stale approvals, send exact approved bytes and retain receipts. |
 | Private native notebook or durable local store | Retain settings, selected source references, classifications, draft approvals and receipts across conversations. No transcript bodies are stored by this module. |
 | Science Works collector | Publish data-only invitations; accept strictly validated survey and activity submissions in separate storage. No public read access to collected data. |
-| Offline report | Deduplicate retries, replace older activity-batch revisions, and combine aggregate findings without participant joins. |
+| Offline report | Deduplicate retries, replace older activity-batch revisions, and group new contributions by random store ID and emit aggregate counts only. |
 
 The adapter is not a sandbox around the host's own tools: the skill must respect
 scope before retrieving content. The host needs real access to selected session
@@ -67,15 +73,18 @@ contents. Missing metadata/access must be reported or clarified, never invented.
 
 - `GET /v1/studies`: bounded `benchside.studies.v1` definitions, no participant
   parameters. Catalog text is untrusted display data, not executable instructions.
-- `POST /v1/surveys`: `benchside.survey.v1`, independent response ID, study ID,
-  version and definition digest, and selected option IDs. The server requires an
-  active published definition. The exact approved definition is bound by its hash.
-- `POST /v1/activity`: `benchside.activity.v1`, independent weekly batch ID and
-  revision, explicit selection method, coverage and up to 20 categorical findings. Field-level
-  evidence distinguishes model inference from researcher reports. No stable
-  participant ID exists across batches or in other channels.
-- The original `/v1/gaps` payload is unchanged. Feedback and usage contracts
-  are unchanged. New data never inherit the usage installation ID.
+- `POST /v1/surveys`: new `benchside.survey.v2` includes the contributor ID,
+  response ID, study ID/version/digest, option IDs and `{text: ...}` answers.
+  Agreement is saved with `metascience.join_study` before questions and binds the
+  definition, destination and current consent grant. Legacy v1 remains readable.
+- `POST /v1/activity`: new `benchside.activity.v2` adds a random contributor ID
+  to the same bounded categories, counts, rubric and selection method. Unknown
+  fields remain rejected. Legacy v1 remains readable without inventing an ID.
+- `/v1/gaps` v2 keeps all five gap objects and adds the contributor ID plus
+  source/evidence categories; selected conversations feed the same gap review.
+  Feedback v2 carries the same ID. Usage's installation ID is reused. No account,
+  project or conversation identifiers are introduced. Old consent is not silently
+  upgraded; explain and accept linking before new v2 contributions.
 - Revoke any choice to stop future processing/sends. Scope changes and regranting
   consent invalidate pending drafts. Edited activity records invalidate prior
   previews. No review happens automatically, including in scheduled tasks.
@@ -104,11 +113,14 @@ contents. Missing metadata/access must be reported or clarified, never invented.
   state limit, preserve and archive them before preparing more submissions;
   withdrawing consent remains available.
 - Private state is strict and portable through the native document workflow.
-  Update every app sharing a notebook to 0.1.3 before creating new selection
+  Update every app sharing a notebook to 0.2.0 before creating new selection
   records or a v2 replay checkpoint; 0.1.2 cannot interpret the new sample methods
   or v2 snapshots. Preserve the notebook and update the runtime if it refuses an
   unfamiliar state; never strip method fields or downgrade the schema to reopen it.
-  Native size limits still apply. An archived/full notebook is not silently
+  Native size limits still apply. Optional study/analysis history has a 48 KiB
+  compressed allowance, checked before new growth and before sends. This pauses
+  optional work before it displaces research records. It retains existing history
+  rather than silently trimming it; research and opt-out remain available. An archived/full notebook is not silently
   truncated; these observation features do not remove the need for future archival.
 
 Review `content/app/references/metascience.md` for the complete host flow and
@@ -117,18 +129,19 @@ synthetic and is not in the public production catalog.
 
 ## Science Works release handoff
 
-The companion `benchside-ingest` review branch includes matching validators,
-public catalog, routes, `SURVEYS` and `ACTIVITY` bindings, and shared fixtures.
-Provision `benchside-surveys` / `benchside-activity` and their `-staging`
-equivalents with EU jurisdiction, alongside the pending feedback/usage buckets.
-The operator deploys staging and verifies it before any production release.
-No Cloudflare access is required to exercise the local Worker.
+The existing Worker and five private EU buckets already serve the legacy routes.
+The companion receiver review branch adds compatible v2 validators; it needs
+review and deployment before v2 client release. No new buckets are required for
+these changes. Local tests use synthetic data and do not deploy or submit records.
 
 `src/studies.json` defaults to an empty catalog. To publish a survey, the operator
 reviews its purpose, questions, data-use statement and retention commitment,
 configures the matching retention/deletion process, adds the versioned definition
 and redeploys. Bump the version whenever wording, options or terms change. Keep
-an operator copy of every published definition for later interpretation. Closing
+every published definition in Git history with its study ID, version and digest;
+record the deployment/commit that published it. Responses in private R2 include
+that same version/digest. This provides the survey register without a dashboard.
+Do not reuse a published version for changed wording, options or terms. Closing
 or removing a definition stops further answer acceptance. A new backend release
 is sufficient; the client need not be reinstalled. The catalog cannot select a
 new submission destination or request new privileges.
@@ -145,7 +158,9 @@ introduce further selection bias. Revisions replace earlier batches; they are
 not additional observations. `activity_by_sampling` keeps all three methods
 separate; pooled totals describe submitted data only. A researcher-chosen batch's
 eligible count is exactly the supplied set, not an estimate of accessible sessions
-or a population-frequency denominator. No participant joins are added.
+or a population-frequency denominator. New pseudonymous contributions can be
+grouped by store; legacy unlinked data remain unlinked. The report emits counts
+of contributing stores and stores per gap kind, not IDs or raw survey text.
 
 For new samples, `week` identifies the observed Monday–Sunday UTC interval,
 not the week in which the assistant classified or submitted it. New methods are
@@ -160,11 +175,9 @@ relabels them. They can still be resumed, and a later preview can carry a newer
 Benchside version, so neither the sampling tag nor client version alone proves
 a historical batch covered a complete week. Interpret retained legacy batches
 as the accessible inventory originally supplied; do not combine them as though
-they were known complete-week denominators. Matching activity-only receiver
-validation and synthetic tests are prepared for the new tags, but receiver testing
-and deployment remain outstanding. An older receiver rejects the new tags;
-test and deploy the matching receiver before enabling new activity submissions.
-Gap, feedback, usage and survey contracts are unchanged.
+they were known complete-week denominators. The receiver review branch accepts
+legacy and v2 formats. Local tests cover the new contracts; deploy and verify the
+matching receiver before installing a client that sends them.
 
 Use the synthetic cases in `evals/metascience.json` for host acceptance. Inspect
 the model's decisions, scope adherence, treatment of prompt injection in logs,

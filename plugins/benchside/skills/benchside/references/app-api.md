@@ -154,7 +154,11 @@ The example's content is illustrative. Record the researcher's actual evidence.
 
 The independent `metascience.*` actions require no role or consultation. See
 [metascience](metascience.md) for consent, study invitations, scope selection,
-random session sampling, private classification, batch review and delivery.
+random or researcher-chosen selection, private candidate gaps, supporting activity
+categories, review and delivery. `metascience.gap` adds a sanitised candidate to
+the normal gap-sharing flow. `metascience.join_study` saves agreement to a specific
+survey before questions; supplied answers then authorise sending without a second
+approval prompt. Other submission types still need exact review and approval.
 Native document transport preserves this state alongside the other records.
 The host retrieves only explicitly selected, sampled conversations using its
 existing tools; the Python adapter neither reads chat logs nor runs a model API.

@@ -6,6 +6,14 @@ arrives. The rollout is informal; no fixed cohort or required follow-up session.
 
 ## Current verification
 
+**0.2.0 review update:** the branch adds pseudonymous contributions, researcher-written
+survey answers under prior study agreement, selected-conversation gaps and supporting
+activity categories with definitions. New tests cover consent renewal, exact survey
+text, shared gap review and a cloud capacity safeguard. Session review fixes also
+apply to PR #6. These changes have not been deployed or installed in the live apps;
+the 0.1.5 installed results below remain the latest live-app evidence.
+
+
 **28 October update:** [live acceptance results](acceptance-2026-10-28.md)
 supersede the deployment and 0.1.3 update blockers in the historical notes below.
 All five routes now have private EU storage and verified synthetic receipts.
@@ -113,7 +121,7 @@ were changed. Both temporary receivers were stopped and their storage removed.
 - Optional discipline and career-stage categories, with an independent choice to
   include them in reviewed usage reports. The private profile persists in local
   and native storage; changing it invalidates prepared usage drafts. Aggregate
-  buckets use each installation's latest accepted report. Other channels never
+  buckets use each installation's latest accepted report. In the earlier format, other channels never
   contain these fields, and setup does not infer demographic answers.
 - Optional study invitations and wider observation, with independent consent,
   bounded random samples, categorical records, weekly batch review and aggregate
@@ -313,16 +321,20 @@ once for these buckets; an omitted current profile is not backfilled from older
 weeks. They describe opted-in installations, not exact people or the research
 population. Shared multi-person stores should skip demographic reporting.
 
-Feedback has independent IDs and no installation identifier. Workflow
-observations retain the existing `benchside.gaps.v1` format and omit project,
-session, feedback and installation IDs. Free text is reviewed because removing
-explicit identifier fields cannot guarantee anonymity.
+New contributions use one random pseudonymous ID per private store, including
+workflow observations, feedback, surveys, activity and usage. New v2 envelopes
+keep research project/conversation identifiers out. Existing participants must
+accept the new linking explanation; received unlinked records remain unlinked.
+Public tool/dataset names and versions may explain gaps; model-derived reports
+exclude private findings and research details. Survey text supplied by the
+researcher is preserved as written under the study agreement.
 
 Download authorised copies of the collector datasets to a private
 directory, then run `python -m benchside.reporting <directory>` for Markdown or
 add `--json`. The report deduplicates retries, uses the highest weekly usage
 revision, excludes conflicting snapshots, and combines aggregate findings
-without joining individual submissions across channels.
+with distinct contributing-store counts across channels and per gap kind. No
+contributor IDs or raw survey text appear in the aggregate export.
 
 Survey answers are grouped by study version and definition digest. Activity
 reports use the highest revision of each independent weekly batch, distinguish
@@ -340,9 +352,8 @@ resumed after an update, so a newer preview's client version does not establish
 complete-week coverage. Treat those historical batches as their original supplied
 inventory, and do not assume a complete research-activity denominator. The host
 filters relevance and dates; the engine cannot independently validate that from IDs.
-The matching activity receiver validators/tests are prepared but unexecuted;
-deploy and verify compatibility before new activity submissions. The other
-submission contracts remain unchanged.
+The v2 receiver validators have local tests; deployment and installed-app checks
+remain necessary before the updated client is released.
 
 Only opt-in installations are counted. Reinstallation or multiple apps may
 represent the same person more than once. Use feedback and the examples people

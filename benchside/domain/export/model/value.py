@@ -7,6 +7,7 @@ exactly what left the machine and when.
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from benchside.domain.shared.model.gap import Gap
 from benchside.domain.shared.model.ids import GrantId, ObservationId, ProjectId
@@ -40,6 +41,8 @@ class Observation(ValueObject):
     id: ObservationId
     project_id: ProjectId
     gap: Gap
+    origin: Literal["benchside", "selected_conversation"] = "benchside"
+    basis: Literal["model_inferred", "researcher_reported", "unknown"] = "unknown"
 
 
 class ExportRecord(ValueObject):

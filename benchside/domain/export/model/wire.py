@@ -1,4 +1,4 @@
-"""The existing collector's strict v1 contract, including UTF-16 text limits."""
+"""Strict legacy and linked gap contracts, including UTF-16 text limits."""
 
 import json
 import re
@@ -47,17 +47,35 @@ def validate_payload(payload: str) -> dict:
         data = json.loads(payload)
     except (TypeError, json.JSONDecodeError) as err:
         raise ValidationError("Invalid export JSON") from err
-    if not isinstance(data, dict) or set(data) != {"schema", "observations"}:
+    linked = isinstance(data, dict) and data.get("schema") == "benchside.gaps.v2"
+    fields = {"schema", "observations"} | ({"contributor_id"} if linked else set())
+    if not isinstance(data, dict) or set(data) != fields:
         raise ValidationError("Invalid export fields")
+    if linked and (
+        not isinstance(data["contributor_id"], str)
+        or not re.fullmatch(r"[a-f0-9]{32}", data["contributor_id"])
+    ):
+        raise ValidationError("Invalid contributor identifier")
     observations = data["observations"]
-    if data["schema"] != "benchside.gaps.v1" or not isinstance(observations, list):
+    if data["schema"] not in {"benchside.gaps.v1", "benchside.gaps.v2"} or not isinstance(
+        observations, list
+    ):
         raise ValidationError("Invalid export schema")
     if not 1 <= len(observations) <= MAX_OBSERVATIONS:
         raise ValidationError("An export needs 1–1000 observations")
     seen = set()
     for observation in observations:
-        if not isinstance(observation, dict) or set(observation) != {"id", "gap"}:
+        provenance = linked and isinstance(observation, dict) and "origin" in observation
+        fields = {"id", "gap"} | ({"origin", "basis"} if provenance else set())
+        if not isinstance(observation, dict) or set(observation) != fields:
             raise ValidationError("Invalid observation fields")
+        if provenance and (
+            not isinstance(observation["origin"], str)
+            or not isinstance(observation["basis"], str)
+            or observation["origin"] not in {"benchside", "selected_conversation"}
+            or observation["basis"] not in {"model_inferred", "researcher_reported", "unknown"}
+        ):
+            raise ValidationError("Invalid observation origin or evidence basis")
         identifier = observation["id"]
         if not isinstance(identifier, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", identifier

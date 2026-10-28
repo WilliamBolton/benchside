@@ -1,6 +1,6 @@
 [project]
 name = "benchside"
-version = "0.1.5"
+version = "0.2.0"
 description = "Research colleagues with private project memory and optional workflow reporting."
 readme = "README.md"
 authors = [

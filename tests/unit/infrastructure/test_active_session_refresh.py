@@ -84,7 +84,9 @@ def test_explicit_identity_does_not_recreate_ended_registration(paths, monkeypat
     assert (paths.home / "sessions/ended-a.ended").is_file()
 
 
-def test_expired_idle_pointer_needs_explicit_resumption_and_cannot_adopt_a_peer(paths, monkeypatch):
+def test_expired_idle_pointer_remains_available_only_to_its_explicit_conversation(
+    paths, monkeypatch
+):
     now = time.time()
     monkeypatch.setattr(time, "time", lambda: now)
     register_session(paths, PID, "idle-a")
@@ -99,11 +101,11 @@ def test_expired_idle_pointer_needs_explicit_resumption_and_cannot_adopt_a_peer(
     monkeypatch.setenv("CLAUDE_SESSION_ID", "idle-a")
 
     assert current_session(paths, PID) == "idle-a"
-    assert runtime.read_pointer(paths, PID) is None
+    assert runtime.read_pointer(paths, PID)["sitting_id"] == "unfinished-a"
     assert json.loads((paths.home / "projects/synthetic-active/current-session").read_text())[
         "sessions"
     ] == ["new-b"]
-    assert (paths.home / "sessions/idle-a.ended").is_file()
+    assert (paths.home / "sessions/idle-a.json").is_file()
     assert journal.read_text() == "Synthetic scientific history is preserved.\n"
 
 

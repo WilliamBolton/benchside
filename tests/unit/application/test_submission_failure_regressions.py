@@ -140,7 +140,9 @@ def test_failure_counting_requires_separate_usage_consent(paths, channel):
         flow.send(identifier, "0" * 64)
     assert counts(sharing) == {}
     assert sink.sent == []
-    assert not (paths.home / "reporting/installation.json").exists()
+    # Linked feedback/activity can create the contributor ID independently of usage.
+    assert not sharing.reporting.active_grant("usage")
+    assert not list((paths.home / "reporting").glob("usage-*.json"))
 
 
 @pytest.mark.parametrize("channel", ["gaps", "feedback", "usage", "surveys", "activity"])

@@ -1,6 +1,6 @@
 """Offline aggregate report from operator-authorised R2 downloads.
 
-Does not join gaps, feedback or usage at participant level. Highest weekly
+Links new contributions by a pseudonymous store ID; emits aggregate counts only. Highest weekly
 usage revisions replace earlier snapshots; repeated uploads never add counts.
 """
 
@@ -11,30 +11,36 @@ from pathlib import Path
 
 from benchside.domain.export.model.metascience import (
     MANUAL_SAMPLING,
-    ActivityPayload,
-    SurveyPayload,
+    TextAnswer,
+    parse_activity,
+    parse_survey,
 )
-from benchside.domain.export.model.reporting import FeedbackPayload, UsagePayload
+from benchside.domain.export.model.reporting import UsagePayload, parse_feedback
 from benchside.domain.export.model.wire import validate_payload
 from benchside.domain.shared.error import BenchsideError
 
 
 def summarise(files):
     gaps, feedback, usage, surveys, activity = {}, {}, {}, {}, {}
+    gap_contributors = {}
     invalid, conflicts = 0, set()
     for path in files:
         try:
             text = Path(path).read_text(encoding="utf-8")
             data = json.loads(text)
             schema = data.get("schema")
-            if schema == "benchside.gaps.v1":
+            if schema in {"benchside.gaps.v1", "benchside.gaps.v2"}:
                 for item in validate_payload(text)["observations"]:
                     previous = gaps.get(item["id"])
                     if previous is not None and previous != item:
                         conflicts.add(("gaps", item["id"]))
+                    owner = data.get("contributor_id")
+                    if item["id"] in gap_contributors and gap_contributors[item["id"]] != owner:
+                        conflicts.add(("gaps", item["id"]))
+                    gap_contributors[item["id"]] = owner
                     gaps[item["id"]] = item
-            elif schema == "benchside.feedback.v1":
-                parsed = FeedbackPayload.model_validate_json(text)
+            elif schema in {"benchside.feedback.v1", "benchside.feedback.v2"}:
+                parsed = parse_feedback(text)
                 existing = feedback.get(parsed.feedback.id)
                 if existing is not None and existing != parsed:
                     conflicts.add(("feedback", parsed.feedback.id))
@@ -47,16 +53,20 @@ def summarise(files):
                     conflicts.add(("usage", *key, parsed.revision))
                 if previous is None or parsed.revision > previous.revision:
                     usage[key] = parsed
-            elif schema == "benchside.survey.v1":
-                parsed = SurveyPayload.model_validate_json(text)
+            elif schema in {"benchside.survey.v1", "benchside.survey.v2"}:
+                parsed = parse_survey(text)
                 previous = surveys.get(parsed.response_id)
                 if previous and previous != parsed:
                     conflicts.add(("survey", parsed.response_id))
                 surveys[parsed.response_id] = parsed
-            elif schema == "benchside.activity.v1":
-                parsed = ActivityPayload.model_validate_json(text)
+            elif schema in {"benchside.activity.v1", "benchside.activity.v2"}:
+                parsed = parse_activity(text)
                 previous = activity.get(parsed.batch_id)
                 if previous and previous.sampling != parsed.sampling:
+                    conflicts.add(("activity-method", parsed.batch_id))
+                if previous and getattr(previous, "contributor_id", None) != getattr(
+                    parsed, "contributor_id", None
+                ):
                     conflicts.add(("activity-method", parsed.batch_id))
                 if previous and previous.revision == parsed.revision and previous != parsed:
                     conflicts.add(("activity", parsed.batch_id, parsed.revision))
@@ -80,10 +90,15 @@ def summarise(files):
         if ("activity", k, v.revision) not in conflicts and ("activity-method", k) not in conflicts
     }
     survey_counts = Counter()
+    survey_text_counts = Counter()
     activity_counts = Counter()
+    activity_contexts = Counter()
     by_sampling = {}
     for survey in surveys.values():
         for question, answer in survey.answers.items():
+            if isinstance(answer, TextAnswer):
+                survey_text_counts[f"{survey.study_id}@{survey.study_version}/{question}"] += 1
+                continue
             survey_counts[
                 f"{survey.study_id}@{survey.study_version}/{survey.study_sha256}/{question}/{answer}"
             ] += 1
@@ -105,6 +120,10 @@ def summarise(files):
             }
         )
         for observation in batch.observations:
+            context = {"none": "outside_benchside", "unknown": "unknown"}.get(
+                observation.benchside_role, "benchside"
+            )
+            activity_contexts[context] += 1
             findings = Counter()
             for field in ("activity", "obstacle", "verification", "outcome"):
                 finding = getattr(observation, field)
@@ -141,7 +160,7 @@ def summarise(files):
                 weekly[week][field] += getattr(row, field)
         errors.update(report.errors)
     # One demographic entry per participating installation, from its latest accepted
-    # weekly snapshot. Never join these categories to gaps, feedback or activity.
+    # weekly snapshot. The aggregate output does not expose per-store records.
     latest = {}
     for (installation, week), report in usage.items():
         previous = latest.get(installation)
@@ -153,9 +172,32 @@ def summarise(files):
             for field, value in report.demographics.model_dump(exclude_none=True).items():
                 demographic_counts[field][value] += 1
     weeks_by_installation = Counter(i for installations in active.values() for i in installations)
+    contributors = {
+        "gaps": {gap_contributors[key] for key in gaps if gap_contributors.get(key)},
+        "feedback": {getattr(v, "contributor_id", None) for v in feedback.values()} - {None},
+        "usage": {key[0] for key in usage},
+        "surveys": {getattr(v, "contributor_id", None) for v in surveys.values()} - {None},
+        "activity": {getattr(v, "contributor_id", None) for v in activity.values()} - {None},
+    }
+    contributor_channels = Counter(
+        identifier for identifiers in contributors.values() for identifier in identifiers
+    )
+    gap_kind_contributors = defaultdict(set)
+    for key, item in gaps.items():
+        if gap_contributors.get(key):
+            gap_kind_contributors[item["gap"]["kind"]].add(gap_contributors[key])
     return {
         "workflow_observations": len(gaps),
+        "workflow_origins": dict(
+            sorted(Counter(o.get("origin", "legacy_unknown") for o in gaps.values()).items())
+        ),
         "workflow_kinds": dict(sorted(Counter(o["gap"]["kind"] for o in gaps.values()).items())),
+        "contributing_stores": len(contributor_channels),
+        "contributing_stores_by_channel": {key: len(value) for key, value in contributors.items()},
+        "stores_contributing_multiple_channels": sum(n > 1 for n in contributor_channels.values()),
+        "contributing_stores_by_workflow_kind": {
+            key: len(value) for key, value in sorted(gap_kind_contributors.items())
+        },
         "feedback_submissions": len(feedback),
         "feedback_ease": dict(
             sorted(Counter(str(f.feedback.ease) for f in feedback.values()).items())
@@ -183,6 +225,7 @@ def summarise(files):
         "failures": dict(sorted(errors.items())),
         "survey_submissions": len(surveys),
         "survey_answers": dict(sorted(survey_counts.items())),
+        "survey_free_text_responses": dict(sorted(survey_text_counts.items())),
         "activity_batches": len(activity),
         "activity_coverage": {
             "eligible_in_submitted_batches": sum(b.eligible for b in activity.values()),
@@ -190,6 +233,7 @@ def summarise(files):
             "reviewed_and_shared": sum(len(b.observations) for b in activity.values()),
         },
         "activity_findings": dict(sorted(activity_counts.items())),
+        "activity_contexts": dict(sorted(activity_contexts.items())),
         "activity_by_sampling": {
             key: {
                 "batches": value["batches"],
@@ -200,7 +244,7 @@ def summarise(files):
         },
         "invalid_files": invalid,
         "conflicting_snapshots": len(conflicts),
-        "interpretation": "Opt-in installations, not unique people or total adoption. Completion does not establish scientific benefit. Datasets are not linked. Demographic buckets describe optional self-reports from each installation's latest accepted weekly snapshot; they are not population estimates or unique people. Activity totals pool submitted batches only; use activity_by_sampling to distinguish legacy percentage sampling, capped random selection and manual selection. Manual eligible counts describe only the researcher-chosen set, not a population denominator or frequency estimate. Random selection covers only the supplied accessible research inventory. Historical legacy samples may cover a partial week. Model-inferred findings and researcher-reported outcomes are distinct; review and nonresponse introduce selection bias. Validate the classifier on separately consented examples before making accuracy claims. These exploratory rollout findings are separate from the original paper evaluation.",
+        "interpretation": "Opt-in stores/installations, not unique people or total adoption. New contributions can be linked by a random store ID after the updated explanation is accepted; legacy unlinked records remain unlinked. Workflow problems are the primary output; activity categories provide supporting context. Outside-Benchside conversations are not Benchside usage. Completion does not establish scientific benefit. Demographic buckets describe optional self-reports from each installation's latest accepted weekly snapshot, not population estimates. Activity totals pool submitted batches only; use activity_by_sampling to distinguish legacy percentage sampling, capped random selection and manual selection. Manual eligible counts describe only the researcher-chosen set, not a population denominator or frequency estimate. Random selection covers only the supplied accessible research inventory. Historical legacy samples may cover a partial week. Model-inferred findings and researcher-reported outcomes are distinct; review and nonresponse introduce selection bias. Validate the classifier on separately consented examples before making accuracy claims. These exploratory rollout findings are separate from the original paper evaluation.",
     }
 
 
@@ -222,6 +266,8 @@ def markdown(report):
     for label, key in [
         ("Weekly activity", "weekly"),
         ("Workflow problems", "workflow_kinds"),
+        ("Contributing stores by workflow kind", "contributing_stores_by_workflow_kind"),
+        ("Workflow observation sources", "workflow_origins"),
         ("Optional discipline buckets (installations)", "installations_by_discipline"),
         ("Optional career-stage buckets (installations)", "installations_by_career_stage"),
         ("Roles used", "consultations_by_role"),
@@ -234,6 +280,7 @@ def markdown(report):
         ("Survey answers (study/version/definition/question/answer)", "survey_answers"),
         ("Pooled activity counts (submitted batches only)", "activity_coverage"),
         ("Pooled activity findings and evidence basis", "activity_findings"),
+        ("Activity with and without Benchside roles", "activity_contexts"),
     ]:
         lines += ["", f"## {label}", "", "| Measure | Count |", "|---|---|"]
         for name, value in report[key].items():

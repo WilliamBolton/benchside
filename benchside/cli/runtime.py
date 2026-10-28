@@ -189,8 +189,8 @@ def read_pointer(paths: Paths, project_id: ProjectId | None = None) -> dict | No
     never be adopted (regression: /pi opened in the wrong directory bled into
     the next project's session). Order: BENCH_SITTING env override (explicit,
     allowed cross-project so stranded sittings can be cleaned up), then this
-    session's pointer, then a single unambiguous live pointer — the latter two
-    only when they match the current project.
+    session's pointer (including the local terminal pointer), only when it
+    matches the current project. A missing ID never adopts another conversation.
     """
     override = os.environ.get("BENCH_SITTING")
     if override:
@@ -198,9 +198,8 @@ def read_pointer(paths: Paths, project_id: ProjectId | None = None) -> dict | No
             if record.get("sitting_id") == override:
                 return record
         return {"sitting_id": override, "project_id": None}
-    # Resolving the fallback can expire a crashed conversation and retire its
-    # pointer. Read live pointers afterwards so it cannot be adopted from a
-    # stale in-memory snapshot.
+    # Expired fallback registrations do not retire explicit conversation pointers.
+    # Those pointers must not be adopted merely because only one remains.
     mine = session_name(paths, project_id)
     records = live_pointers(paths)
     if project_id is not None:
@@ -208,8 +207,6 @@ def read_pointer(paths: Paths, project_id: ProjectId | None = None) -> dict | No
     for record in records:
         if record.get("session") == mine:
             return record
-    if mine == "local" and len(records) == 1:
-        return records[0]
     return None
 
 

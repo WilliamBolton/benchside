@@ -115,6 +115,19 @@ class FeedbackPayload(StrictValue):
     feedback: Feedback
 
 
+class LinkedFeedbackPayload(FeedbackPayload):
+    schema_version: Literal["benchside.feedback.v2"] = Field(
+        default="benchside.feedback.v2", alias="schema"
+    )
+    contributor_id: Identifier
+
+
+def parse_feedback(payload):
+    from pydantic import TypeAdapter
+
+    return TypeAdapter(FeedbackPayload | LinkedFeedbackPayload).validate_json(payload)
+
+
 class RecordCounts(StrictValue):
     hypothesis: Count = 0
     critique: Count = 0

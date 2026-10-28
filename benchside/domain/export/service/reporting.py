@@ -33,6 +33,7 @@ from benchside.domain.export.model.reporting import (
     UsagePayload,
     UsageRow,
     Version,
+    parse_feedback,
 )
 from benchside.domain.export.model.value import ExportPreview
 from benchside.domain.export.port.redactor import Redactor
@@ -236,8 +237,11 @@ class ReportingService(Service):
             raise ConsentRequiredError("The reviewed payload changed or has not been approved")
         if preview.destination != sink.destination:
             raise ConsentRequiredError("The destination changed; review the submission again")
-        model = FeedbackPayload if channel == "feedback" else UsagePayload
-        parsed = model.model_validate_json(preview.payload)
+        parsed = (
+            parse_feedback(preview.payload)
+            if channel == "feedback"
+            else UsagePayload.model_validate_json(preview.payload)
+        )
         if any(f.tier == "HIGH" for f in redactor.scan(preview.payload)):
             raise ValidationError("Sensitive content remains; edit and review before sending")
         identifier = parsed.feedback.id if channel == "feedback" else parsed.report_id

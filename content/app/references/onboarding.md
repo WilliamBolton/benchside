@@ -133,18 +133,21 @@ show the following choices together, with nothing preselected:
 | Usability feedback | Optionally give a rating and comment after using Benchside; do not ask for an experience rating during setup. |
 | Usage counts | Share reviewed counts of consultations, roles, app/version information and failures. A random installation ID helps estimate repeat use; no research text is included. |
 | Optional surveys | Receive occasional study invitations, at most one per seven days; each survey explains its purpose, data use and retention before participation. |
-| Selected-conversation analysis | Privately analyse a bounded sample from sources the researcher selects, including work outside Benchside roles. Separately choose whether to review and share the resulting categories. |
+| Selected-conversation analysis | Privately analyse up to 20 relevant conversations from the previous complete week, randomly selected or researcher-chosen. Find workflow problems for reviewed gap sharing; activity categories provide optional supporting context. |
 
-Explain that scientific findings, hypotheses, measurements, identifiable samples
-or datasets, detailed protocols/analyses, source passages and raw transcripts
-must never be submitted for metascience. This is not an optional sharing setting.
-Only general workflow observations, feedback, counts, survey answers and fixed
-workflow categories are eligible. Free-text observations and comments must be
-generalised or omitted if they reveal research-specific content; identifier
-scrubbing alone does not establish that they are safe to share.
-Workflow observations, feedback and activity categories are not linked to the usage
-installation ID. These settings apply to this Benchside store, including projects
-and apps sharing it; they are not account-wide permission to read conversations.
+Explain that model-derived problem reports exclude private findings, hypotheses,
+measurements, sample identifiers, detailed protocols and source passages. Public
+software/dataset names and versions can remain when they explain a workflow
+problem. Raw transcripts never go to Science Works. Researcher-written survey
+answers are sent as written under the agreement for that study; do not copy or
+infer extra scientific details into them.
+
+New contributions share a random pseudonymous ID, allowing Science Works to group
+problems and optional feedback, usage, surveys and activity over time. Explain
+this before saving choices. Older unlinked grants need a renewed choice. The ID
+identifies a private store, not an exact person or account. These preferences
+apply to that store, including its projects and apps sharing it; they are not
+account-wide permission to read conversations.
 
 Follow [sharing](sharing.md) for the first three choices and
 [metascience](metascience.md) for invitations, analysis and sharing workflow categories.
@@ -159,8 +162,8 @@ not interpret a returning project's `unasked` marker as permission to repeat the
 pitch. Preserve existing choices and let the researcher reopen them.
 
 If conversation analysis is selected, ask only then which accessible projects or
-conversations may be analysed, and whether the resulting workflow categories
-should remain in their private notebook or be prepared for reviewed sharing.
+conversations may be analysed, and whether supporting activity categories
+should remain private or be prepared for review. Reviewed problems use gap sharing.
 For example: activity = coding, obstacle = tool failure, verification = ran a test.
 These categories describe how the tool was used, never the scientific result. Save the selected source scope before reading
 additional conversation bodies. Do not infer permission for other chats, background
@@ -168,7 +171,9 @@ monitoring or scheduled runs. The existing sampling and invitation limits apply;
 ordinary setup requires no notification schedule.
 
 Consent during setup enables the selected workflow, not automatic transmission.
-Each actual submission still requires an exact preview and approval. Explain that
+Gap, feedback, usage and activity submissions require exact preview and approval.
+For surveys, agree to the study before questions; supplying answers then authorises
+submission without a second prompt. Explain that
 choices can be changed later; stopping participation blocks future activity/sends
 but does not erase data already received. Do not claim an unavailable receiving
 route or connector is working. A saved preference can remain pending deployment.

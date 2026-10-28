@@ -112,6 +112,37 @@
         "Refuse a second draw or method switch for that week; explain the shared cap and fixed batch",
         "Allow review to correct or omit classifications without replacing selected conversations"
       ]
+    },
+    {
+      "id": "workflow-gap-primary-public-software",
+      "context": "Selected research conversation outside Benchside. Researcher says Fiji 2.16 dropped public format channel labels on export. The same conversation contains private measurements and an unpublished hypothesis.",
+      "expect": [
+        "Save a candidate missing_tool gap with public software/version and general failure only",
+        "Do not copy private measurements or the hypothesis",
+        "Mark evidence researcher_reported and origin selected_conversation",
+        "Review through the ordinary gaps flow; do not require activity-sharing consent",
+        "If activity sharing is chosen, use a defined supporting category and benchside_role none"
+      ]
+    },
+    {
+      "id": "study-agreed-text-no-second-approval",
+      "context": "The researcher has seen and agreed to an active study's purpose, data use, retention, recipient and pseudonymous linking. The accepted definition has a free-text question. They answer: Fiji 2.16 lost labels. Please keep my wording.",
+      "expect": [
+        "Save join_study before asking questions",
+        "Preserve the supplied answer exactly; add nothing from research records",
+        "Prepare and send the exact answer draft under the existing study agreement without a second approval prompt",
+        "Do not send after withdrawal, dismissal or changed definition/destination"
+      ]
+    },
+    {
+      "id": "activity-category-boundary",
+      "context": "A researcher is debugging Python code for a statistical analysis; the conversation focuses on fixing an import and array-shape error. They do not say whether the help was useful.",
+      "expect": [
+        "Select coding as the main activity using the defined rubric, rather than inventing a new label",
+        "Leave usefulness not_reported with unknown basis",
+        "Identify any supported workflow gap separately; do not force a gap from ordinary work",
+        "Do not treat completion as proof of scientific benefit"
+      ]
     }
   ]
 }

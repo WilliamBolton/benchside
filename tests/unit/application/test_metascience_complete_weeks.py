@@ -4,7 +4,11 @@ from datetime import date, timedelta
 import pytest
 
 from benchside.application.metascience import Metascience
-from benchside.domain.export.model.metascience import ActivityPayload, Sample, digest
+from benchside.domain.export.model.metascience import (
+    Sample,
+    digest,
+    parse_activity,
+)
 from benchside.domain.shared.error import ValidationError
 
 SCOPE = {"host": "claude", "source_id": "synthetic-selected-source"}
@@ -120,12 +124,13 @@ def test_completed_week_preview_preserves_wire_contract_without_source_ids(paths
     )
     flow.record(batch["week"], next(iter(batch["selected"])), CLASSIFICATION)
     preview = flow.preview_activity(batch["week"])
-    payload = ActivityPayload.model_validate_json(preview["payload"])
+    payload = parse_activity(preview["payload"])
     assert payload.week == "2026-10-19"
     assert payload.sampling == "weekly-random-max20-v1"
     assert payload.eligible == payload.selected == 1
     assert payload.observations[0].benchside_role == "none"
     assert set(json.loads(preview["payload"])) == {
+        "contributor_id",
         "schema",
         "benchside_version",
         "batch_id",

@@ -9,16 +9,18 @@ from typing import Literal
 from pydantic import Field
 
 from benchside import __version__
+from benchside.application.contributions import ContributionPolicy, contributor_id
 from benchside.application.submission_failures import record_submission_failure
 from benchside.config import Paths
 from benchside.domain.export.event.reporting import ReportSubmitted
 from benchside.domain.export.model.reporting import (
     Demographics,
     Feedback,
+    LinkedFeedbackPayload,
     ResearchProfile,
     StrictValue,
 )
-from benchside.domain.export.model.value import ExportPreview
+from benchside.domain.export.model.value import ExportPreview, Observation
 from benchside.domain.export.service.consent import ConsentService
 from benchside.domain.export.service.export import ExportService
 from benchside.domain.export.service.reporting import ReportingService, week_start
@@ -27,7 +29,7 @@ from benchside.domain.shared.error import (
     NotFoundError,
     ValidationError,
 )
-from benchside.domain.shared.model.ids import CONSENT_LEDGER_PROJECT
+from benchside.domain.shared.model.ids import CONSENT_LEDGER_PROJECT, ProjectId
 from benchside.infrastructure.files import atomic_json
 from benchside.infrastructure.http_sink import COLLECTOR, HttpExportSink
 from benchside.infrastructure.journal.projection import (
@@ -50,6 +52,38 @@ class ParticipationChoice(StrictValue):
     response: Literal["unasked", "declined", "deferred", "configured"] = "unasked"
 
 
+class CombinedObservationReader(JournalObservationReader):
+    def __init__(self, journal, paths):
+        super().__init__(journal)
+        self.paths = paths
+
+    def list_all(self):
+        from benchside.domain.export.model.metascience import MetaState
+
+        found = super().list_all()
+        path = self.paths.home / "metascience/state.json"
+        if not path.exists():
+            return found
+        state = MetaState.model_validate_json(path.read_text())
+        if "analysis" not in state.grants:
+            return found
+        for sample in state.samples.values():
+            for token, problems in sample.problems.items():
+                if sample.selected[token].scope not in state.scopes:
+                    continue
+                found.extend(
+                    Observation(
+                        id=problem.id,
+                        project_id=ProjectId("reporting-ledger"),
+                        gap=problem.gap,
+                        origin="selected_conversation",
+                        basis=problem.basis,
+                    )
+                    for problem in problems
+                )
+        return found
+
+
 class SharingFlow:
     """Call under the installation transaction lock (CLI and app adapter do so)."""
 
@@ -64,14 +98,16 @@ class SharingFlow:
 
     @property
     def export(self):
-        return ExportService(
-            observations=JournalObservationReader(self.journal),
+        service = ExportService(
+            observations=CombinedObservationReader(self.journal, self.paths),
             consent=self.consent,
             redactor=self.redactor,
             sink=self._get_sink("gaps"),
             ledger=self.ledger,
             journal=self.journal,
         )
+        service.contributor_id = contributor_id(self.paths) if self._policy_grant("gaps") else None
+        return service
 
     def _get_sink(self, channel):
         # Optional collection configuration must not block private scientific work.
@@ -91,6 +127,29 @@ class SharingFlow:
             ResearchProfile.model_validate_json(path.read_text())
             if path.exists()
             else ResearchProfile()
+        )
+
+    def contribution_policy(self):
+        path = self.paths.home / "reporting/contributions.json"
+        return (
+            ContributionPolicy.model_validate_json(path.read_text())
+            if path.exists()
+            else ContributionPolicy()
+        )
+
+    def _policy_grant(self, channel):
+        return self.contribution_policy().grants.get(channel)
+
+    def _accept_policy(self, channel, grant):
+        policy = self.contribution_policy()
+        grants = dict(policy.grants)
+        if grant:
+            grants[channel] = grant
+        else:
+            grants.pop(channel, None)
+        atomic_json(
+            self.paths.home / "reporting/contributions.json",
+            ContributionPolicy(grants=grants).model_dump(),
         )
 
     def participation(self):
@@ -142,6 +201,16 @@ class SharingFlow:
             "gaps": {"enabled": bool(grant), "kinds": sorted(grant.gap_kinds) if grant else []},
             "feedback": {"enabled": bool(self.reporting.active_grant("feedback"))},
             "usage": {"enabled": bool(self.reporting.active_grant("usage"))},
+            "linking": "random_contributor_id",
+            "needs_policy_renewal": [
+                channel
+                for channel, active in (
+                    ("gaps", grant.id if grant else None),
+                    ("feedback", self.reporting.active_grant("feedback")),
+                    ("usage", self.reporting.active_grant("usage")),
+                )
+                if active and self._policy_grant(channel) != active
+            ],
             "installation_id": json.loads(installation.read_text())["id"]
             if installation.exists()
             else None,
@@ -153,9 +222,10 @@ class SharingFlow:
             if not enabled:
                 if active:
                     self.consent.revoke()
+                self._accept_policy(channel, None)
                 return
             selected = frozenset(kinds or ())
-            if active and active.gap_kinds == selected:
+            if active and active.gap_kinds == selected and self._policy_grant(channel) == active.id:
                 return
             # Validate before revoking an existing grant.
             from benchside.domain.shared.model.gap import GAP_KINDS
@@ -165,8 +235,12 @@ class SharingFlow:
             if active:
                 self.consent.revoke()
             self.consent.grant(grant_id=f"g-{uuid.uuid4().hex}", gap_kinds=selected)
+            self._accept_policy(channel, self.consent.active_grant().id)
         elif channel in {"feedback", "usage"}:
+            if enabled and self.reporting.active_grant(channel) and not self._policy_grant(channel):
+                self.reporting.set_consent(channel, False)
             self.reporting.set_consent(channel, enabled)
+            self._accept_policy(channel, self.reporting.active_grant(channel))
         else:
             raise ValidationError("Unknown sharing channel")
 
@@ -174,6 +248,13 @@ class SharingFlow:
         return self.reporting.record_feedback(Feedback(id=uuid.uuid4().hex, **values))
 
     def prepare(self, channel, *, only=None, edits=None, feedback_id=None, comment=None, week=None):
+        grant = self.consent.active_grant() if channel == "gaps" else None
+        active = grant.id if grant else self.reporting.active_grant(channel)
+        if active and self._policy_grant(channel) != active:
+            raise ConsentRequiredError(
+                "Sharing now includes a random contributor ID linking contributions over time. "
+                "Explain this change and renew this sharing choice before preparing a new submission."
+            )
         if channel == "gaps":
             previews = self.export.previews(only=only, edits=edits)
             if not any(preview.observation_ids for preview in previews):
@@ -195,6 +276,12 @@ class SharingFlow:
                     data = json.loads(payload)
                     data["feedback"]["comment"] = comment
                     payload = FeedbackPayload.model_validate(data).model_dump_json(by_alias=True)
+                data = json.loads(payload)
+                payload = LinkedFeedbackPayload(
+                    benchside_version=data["benchside_version"],
+                    feedback=data["feedback"],
+                    contributor_id=contributor_id(self.paths),
+                ).model_dump_json(by_alias=True)
             else:
                 payload = self._usage(week or week_start())
             payload = self.redactor.apply(payload)
@@ -219,8 +306,10 @@ class SharingFlow:
             profile_revision = self.profile().revision if channel == "usage" else None
             draft = next(
                 (
-                    old for old in existing
-                    if old.channel == channel and old.preview == preview
+                    old
+                    for old in existing
+                    if old.channel == channel
+                    and old.preview == preview
                     and old.demographics_revision == profile_revision
                 ),
                 None,
@@ -245,12 +334,7 @@ class SharingFlow:
 
     def _usage(self, week):
         directory = self.paths.home / "reporting"
-        identity_path = directory / "installation.json"
-        if identity_path.exists():
-            identity = json.loads(identity_path.read_text())["id"]
-        else:
-            identity = uuid.uuid4().hex
-            atomic_json(identity_path, {"id": identity})
+        identity = contributor_id(self.paths)
         # Validate the week before using it as a filename.
         from datetime import date
 

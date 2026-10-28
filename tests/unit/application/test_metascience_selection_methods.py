@@ -7,7 +7,12 @@ from pydantic import ValidationError as SchemaError
 
 from benchside.application.metascience import Metascience
 from benchside.application.native import pack, run_native, unpack
-from benchside.domain.export.model.metascience import ActivityPayload, Sample, digest
+from benchside.domain.export.model.metascience import (
+    ActivityPayload,
+    Sample,
+    digest,
+    parse_activity,
+)
 from benchside.domain.export.model.value import DeliveryReceipt
 from benchside.domain.shared.error import ValidationError
 
@@ -146,7 +151,7 @@ def test_twenty_classifications_round_trip_and_receipts_preserve_method(paths, m
     for token in batch["selected"]:
         flow.record(batch["week"], token, CLASSIFICATION)
     draft = flow.preview_activity(batch["week"])
-    payload = ActivityPayload.model_validate_json(draft["payload"])
+    payload = parse_activity(draft["payload"])
     assert payload.sampling == tag
     assert payload.eligible == payload.selected == len(payload.observations) == 20
     assert "synthetic-conversation" not in draft["payload"]

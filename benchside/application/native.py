@@ -29,6 +29,7 @@ from benchside.infrastructure.session_context import validate_session_id
 SCHEMA = "benchside.native.v1"
 CHECKPOINT_SCHEMA = "benchside.native.v2"
 MAX_DOCUMENT_BYTES = 190_000  # Fits one native Pages edit with room for transport metadata.
+MAX_METASCIENCE_DOCUMENT_BYTES = 48 * 1024
 MAX_STATE_BYTES = 8 * 1024 * 1024
 # Ordinary writes leave room to withdraw consent even when recording is full.
 DOCUMENT_CONTROL_RESERVE = 16 * 1024
@@ -43,7 +44,7 @@ FILE = re.compile(
     rf"(?:app-projects/{PROJECT}\.json|app-sessions/[a-f0-9]{{32}}\.json|"
     rf"projects/(?:{PROJECT}|consent-ledger|reporting-ledger)/journal\.jsonl|"
     r"sharing/drafts/[a-f0-9]{32}\.json|"
-    r"reporting/(?:installation|profile|participation|usage-\d{4}-\d{2}-\d{2})\.json|metascience/state\.json)"
+    r"reporting/(?:installation|profile|participation|contributions|usage-\d{4}-\d{2}-\d{2})\.json|metascience/state\.json)"
 )
 HEX = re.compile(r"[a-f0-9]{32}")
 OPERATION = re.compile(r"(?:g([1-9][0-9]{0,9})-)?[a-f0-9]{32}")
@@ -123,6 +124,10 @@ def _check_files(files):
             ResearchProfile.model_validate_json(text)
         elif name == "reporting/participation.json":
             ParticipationChoice.model_validate_json(text)
+        elif name == "reporting/contributions.json":
+            from benchside.application.contributions import ContributionPolicy
+
+            ContributionPolicy.model_validate_json(text)
         elif name == "metascience/state.json":
             MetaState.model_validate_json(text)
         elif name.startswith("sharing/"):
@@ -382,7 +387,28 @@ def _capacity(body, snapshot):
             0, MAX_DOCUMENT_BYTES - DOCUMENT_CONTROL_RESERVE - document_bytes
         ),
         "control_reserve_document_bytes": DOCUMENT_CONTROL_RESERVE,
+        "optional_history_document_bytes": _metascience_size(body),
+        "optional_history_limit_bytes": MAX_METASCIENCE_DOCUMENT_BYTES,
     }
+
+
+def _metascience_size(body):
+    text = body["files"].get("metascience/state.json", "")
+    return len(base64.b64encode(zlib.compress(text.encode("utf-8")))) if text else 0
+
+
+def _require_metascience_headroom(body, original=None, *, additional=0):
+    size = _metascience_size(body)
+    if original is not None and size <= _metascience_size(original):
+        return  # Reads, research records, withdrawal and shrinking state remain available.
+    if size + (additional * 4 + 2) // 3 > MAX_METASCIENCE_DOCUMENT_BYTES:
+        raise ValidationError(
+            "Optional analysis and study history has reached its cloud notebook allowance. "
+            "No new analysis or submission was saved. Existing records and receipts remain "
+            "intact; research work and consent withdrawal can continue. Preserve this notebook "
+            "and move to larger private storage before extending optional history.",
+            code="native_capacity",
+        )
 
 
 def _require_headroom(body, snapshot, *, additional=0):
@@ -578,6 +604,10 @@ def _preflight_submission(body, snapshot, command):
         if draft is None:
             return
         metadata = _json({"destination": draft.destination, "draft_id": draft.id})
+        if draft.id not in state.receipts:
+            _require_metascience_headroom(
+                body, additional=10 * 1024 + len(metadata.encode("utf-8"))
+            )
     _require_headroom(body, snapshot, additional=18 * 1024 + 2 * len(metadata.encode("utf-8")))
 
 
@@ -843,9 +873,15 @@ def run_native(request):
             try:
                 original_controls = _privacy_controls(app)
                 if command["action"] in {"sharing.send", "metascience.send"}:
-                    _compact_operations(body)
-                    _bound_operations(body)
-                    _preflight_submission(body, pack(body, expected, snapshot["revision"]), command)
+                    # Capacity checks may migrate an old, oversized replay index.
+                    # Do that only on a copy: a failed send must keep its original
+                    # generation so the same operation can be retried safely.
+                    preflight = copy.deepcopy(body)
+                    _compact_operations(preflight)
+                    _bound_operations(preflight)
+                    _preflight_submission(
+                        preflight, pack(preflight, expected, snapshot["revision"]), command
+                    )
                 result = (
                     _execute_batch(app, body, command["steps"])
                     if batch
@@ -888,6 +924,8 @@ def run_native(request):
         candidate_failed = False
         delivery_confirmed = False
         try:
+            if changed and not withdrawal:
+                _require_metascience_headroom(body, original_body)
             try:
                 candidate = pack(body, expected, snapshot["revision"] + 1) if changed else snapshot
             except ValidationError as error:

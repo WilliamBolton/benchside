@@ -28,8 +28,11 @@ Feedback previews can use `--comment "<reviewed replacement>"`.
 Show the complete prepared content, recipient and any redaction findings.
 Usage includes a random installation ID, weekly counts, role/app/version
 information and standard failure counts, with no research text. Installation
-counts are not exact people. Feedback and workflow observations contain no
-installation ID; the datasets are only combined in aggregate.
+counts are not exact people. New feedback and workflow observations share that random contributor ID so
+Science Works can group contributions over time. Explain this before consent;
+old unlinked grants need a renewed choice. It identifies a store, not a person.
+Public software/dataset names and versions can explain a problem, but private
+scientific findings and source passages must be removed from model-derived gaps.
 
 After the researcher explicitly approves a displayed batch, send that exact
 batch with `bench share send --draft <returned draft ID> --approve-sha256

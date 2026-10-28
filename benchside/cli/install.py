@@ -12,6 +12,7 @@ from benchside.domain.authoring.port.renderer import TemplateRenderer
 from benchside.domain.authoring.port.repository import PersonaRepository, TemplateRepository
 from benchside.domain.authoring.service.authoring import AuthoringService
 from benchside.infrastructure.content.writer import FileSkillWriter
+from benchside.infrastructure.files import atomic_json
 from benchside.util.di import Scope
 
 _TAG = "_benchside"
@@ -124,7 +125,7 @@ def _register_hooks(settings_path: Path) -> None:
             }
         )
     settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    atomic_json(settings_path, settings)
 
 
 def _remove_hooks(settings_path: Path) -> None:
@@ -139,7 +140,7 @@ def _remove_hooks(settings_path: Path) -> None:
             settings["hooks"][event] = retained
             changed = True
     if changed:
-        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        atomic_json(settings_path, settings)
 
 
 def _explicit_skill(text: str) -> str:

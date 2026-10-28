@@ -1,4 +1,4 @@
-"""Data-only study definitions and bounded, unlinkable metascience submissions."""
+"""Data-only study definitions and bounded, pseudonymous metascience submissions."""
 
 import hashlib
 import json
@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from benchside.domain.export.model.reporting import Host, Identifier, Role, StrictValue, Version
+from benchside.domain.shared.model.gap import Gap
 
 Key = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,47}$")]
 Digest = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
@@ -55,6 +56,13 @@ class Question(StrictValue):
         return self
 
 
+class TextQuestion(StrictValue):
+    id: Key
+    prompt: str = Field(min_length=1, max_length=500)
+    type: Literal["text"] = "text"
+    max_length: int = Field(ge=1, le=2000)
+
+
 class Study(StrictValue):
     id: Key
     version: int = Field(ge=1, le=1_000_000)
@@ -64,7 +72,7 @@ class Study(StrictValue):
     retention_days: int = Field(ge=1, le=3650)
     opens: Day
     closes: Day
-    questions: list[Question] = Field(min_length=1, max_length=10)
+    questions: list[Question | TextQuestion] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
     def valid_study(self):
@@ -115,10 +123,60 @@ class SurveyPayload(StrictValue):
         ):
             raise ValueError("Survey does not match the reviewed study definition")
         for question in study.questions:
+            if isinstance(question, TextQuestion) and question.id in self.answers:
+                raise ValueError("Free text needs the current survey format")
             if question.id in self.answers and self.answers[question.id] not in {
                 o.id for o in question.options
             }:
                 raise ValueError("Unknown survey answer")
+
+
+class TextAnswer(StrictValue):
+    text: str = Field(max_length=2000)
+
+
+class LinkedSurveyPayload(SurveyPayload):
+    schema_version: Literal["benchside.survey.v2"] = Field(
+        default="benchside.survey.v2", alias="schema"
+    )
+    contributor_id: Identifier
+    answers: dict[Key, Key | TextAnswer] = Field(min_length=1, max_length=10)
+
+    def check_study(self, study):
+        if (
+            self.study_id != study.id
+            or self.study_version != study.version
+            or self.study_sha256 != digest(study.model_dump())
+        ):
+            raise ValueError("Survey does not match the accepted study definition")
+        questions = {q.id: q for q in study.questions}
+        for identifier, answer in self.answers.items():
+            question = questions.get(identifier)
+            if isinstance(question, TextQuestion):
+                if (
+                    not isinstance(answer, TextAnswer)
+                    or len(answer.text.encode("utf-16-le")) // 2 > question.max_length
+                ):
+                    raise ValueError("Invalid or overlong text answer")
+            elif (
+                not isinstance(question, Question)
+                or not isinstance(answer, str)
+                or answer not in {o.id for o in question.options}
+            ):
+                raise ValueError("Unknown survey answer")
+
+
+def parse_survey(payload):
+    from pydantic import TypeAdapter
+
+    return TypeAdapter(SurveyPayload | LinkedSurveyPayload).validate_json(payload)
+
+
+class StudyParticipation(StrictValue):
+    study_sha256: Digest
+    invitation_grant: Identifier
+    destination: str
+    contributor_id: Identifier
 
 
 class Activity(StrictValue):
@@ -222,6 +280,19 @@ class ActivityPayload(StrictValue):
         return self
 
 
+class LinkedActivityPayload(ActivityPayload):
+    schema_version: Literal["benchside.activity.v2"] = Field(
+        default="benchside.activity.v2", alias="schema"
+    )
+    contributor_id: Identifier
+
+
+def parse_activity(payload):
+    from pydantic import TypeAdapter
+
+    return TypeAdapter(ActivityPayload | LinkedActivityPayload).validate_json(payload)
+
+
 class Scope(StrictValue):
     host: Host
     source_id: str = Field(min_length=1, max_length=256)
@@ -232,6 +303,12 @@ class Candidate(StrictValue):
     session_ref: str = Field(min_length=1, max_length=256)
 
 
+class SelectedProblem(StrictValue):
+    id: Identifier
+    gap: Gap
+    basis: Basis
+
+
 class Sample(StrictValue):
     id: Identifier
     inventory_sha256: Digest
@@ -240,6 +317,7 @@ class Sample(StrictValue):
     sampling: Sampling = LEGACY_SAMPLING
     selected: dict[Identifier, Candidate] = Field(max_length=20)
     records: dict[Identifier, Classification] = Field(default_factory=dict, max_length=20)
+    problems: dict[Identifier, list[SelectedProblem]] = Field(default_factory=dict, max_length=20)
     revision: int = Field(default=0, ge=0, le=1_000_000)
 
     @model_validator(mode="after")
@@ -248,6 +326,12 @@ class Sample(StrictValue):
             raise ValueError("Invalid private sample size")
         if set(self.records) - set(self.selected):
             raise ValueError("Classification is not part of this sample")
+        if set(self.problems) - set(self.selected) or any(
+            len(p) > 5 for p in self.problems.values()
+        ):
+            raise ValueError(
+                "Problems need a selected conversation, with at most five per conversation"
+            )
         return self
 
 
@@ -262,8 +346,10 @@ class MetaDraft(StrictValue):
 
     @model_validator(mode="after")
     def valid_payload(self):
-        model = SurveyPayload if self.channel == "surveys" else ActivityPayload
-        model.model_validate_json(self.payload)
+        if self.channel == "surveys":
+            parse_survey(self.payload)
+        else:
+            parse_activity(self.payload)
         if hashlib.sha256(self.payload.encode()).hexdigest() != self.sha256:
             raise ValueError("Metascience draft digest mismatch")
         expected = {"invitations"} if self.channel == "surveys" else {"analysis", "sharing"}
@@ -303,6 +389,9 @@ class MetaState(StrictValue):
     drafts: dict[Identifier, MetaDraft] = Field(default_factory=dict, max_length=1000)
     latest: dict[str, Identifier] = Field(default_factory=dict, max_length=1000)
     receipts: dict[Identifier, MetaReceipt] = Field(default_factory=dict, max_length=1000)
+    participation: dict[str, StudyParticipation] = Field(default_factory=dict, max_length=500)
+    analysis_policy: Literal["selected-research-max20-1"] | None = None
+    sharing_policy: Literal["pseudonymous-contributions-1"] | None = None
 
     @model_validator(mode="after")
     def consistent_state(self):

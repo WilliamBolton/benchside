@@ -70,10 +70,13 @@ feedback and weekly usage reporting. All are off until consented, and every
 submission needs an exact preview and approval.
 
 - Workflow observations capture general research-workflow friction and problems
-  for metascience research, using the existing `benchside.gaps.v1` format. They
-  exclude project, session, feedback and installation IDs. Free text is scrubbed
+  for metascience research, using the five existing problem types in a `benchside.gaps.v2` envelope. They
+  exclude project and session IDs; a random contributor ID supports grouping. Free text is scrubbed
   and reviewed because a schema cannot guarantee anonymity.
 - Feedback contains an ease-of-use rating, repeat-use intent and optional comment.
+- New contributions share a pseudonymous store ID across channels; participation
+  stays opt-in. Existing participants must accept this change before linked sharing.
+  Historical unlinked contributions remain unlinked.
 - Usage contains weekly counts and role/app/version information, with a random
   installation ID to estimate returning use. It never contains research text.
 - Prepared drafts can select or edit observations. Sending verifies the consent,
@@ -85,7 +88,8 @@ submission needs an exact preview and approval.
 The Science Works endpoint is included in the product; researchers configure no
 credentials. All five collection routes from the companion
 `science-works/benchside-ingest` repository were deployed and verified with
-synthetic records on 28 October. App network access and research release checks
+synthetic records on 28 October. The new v2 linked formats in this review branch
+need the matching receiver update before release; they are not deployed yet. App network access and research release checks
 still apply; deployment does not authorise collection from researchers.
 
 ## Optional studies and wider observation
@@ -97,9 +101,13 @@ Invitations are capped at one per week. Analysis covers up to 20 relevant resear
 conversations from the previous complete week: automatically take all when there
 are 20 or fewer, randomly select 20 when there are more, or let the researcher
 choose up to 20. Both methods share one fixed weekly batch and are labelled and
-reported separately. Only reviewed categories leave the app, with no
-raw logs or installation/project/conversation identifiers. A centrally published
-catalog supports new surveys without reinstalling the client.
+reported separately. Reviewed workflow problems are the primary output and use
+the gaps collector. Fixed activity categories provide supporting context, marked
+as work with or without a Benchside role. No raw logs or private research records
+are submitted. New reports carry the random contributor ID. A centrally published
+catalog supports new surveys without reinstalling the client. Surveys support
+fixed options and researcher-written text. Agreement comes before the questions;
+answers are then sent as written without a second approval prompt.
 
 See [the metascience implementation and review guide](docs/metascience.md).
 The survey/activity routes are deployed. The released catalog starts empty,
@@ -170,9 +178,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.1.5.zip` (standalone skill),
-`dist/benchside-plugin-0.1.5.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.1.5.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.2.0.zip` (standalone skill),
+`dist/benchside-plugin-0.2.0.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.2.0.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

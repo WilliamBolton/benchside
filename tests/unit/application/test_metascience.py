@@ -276,7 +276,10 @@ def test_broader_observation_works_without_a_benchside_role(flow, paths):
     flow.send(draft["id"], draft["sha256"])
     assert flow.sinks["activity"].sent == [draft["payload"]]
     assert not flow.sinks["surveys"].sent
-    assert not (paths.home / "reporting/installation.json").exists()
+    assert (
+        data["contributor_id"]
+        == json.loads((paths.home / "reporting/installation.json").read_text())["id"]
+    )
 
 
 def test_activity_edit_revokes_pending_approval_and_revisions_replace(flow):

@@ -83,11 +83,13 @@ on request; do not repeatedly prompt after a decline or deferral. Declining any
 choice must not affect scientific assistance.
 
 Read [the sharing guide](references/sharing.md) before changing consent or sending.
-Scientific findings and research-specific details are never eligible for
-metascience submissions. Share only the general workflow information allowed by
+Model-derived gaps must exclude private scientific findings and research-specific
+details; public tool/dataset names and versions can remain. Share only the general workflow information allowed by
 the sharing guides. Recording local observations is not permission to send them. Review each exact
 prepared payload with the researcher, allow edits/exclusions, then send only the
 approved draft and digest. Never approve a draft on the researcher's behalf.
+For surveys only, agreement to the displayed study precedes answering; submit
+the researcher's own answers as written without asking for approval again.
 
 If optional study invitations were explicitly enabled, the metascience guide
 also permits a quiet invitation check at a natural stopping point. It enforces

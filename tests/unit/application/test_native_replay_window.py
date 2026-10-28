@@ -397,6 +397,7 @@ def test_failed_single_action_that_retires_sampling_state_still_upgrades_saved_f
     snapshot, body = native.unpack(book.document)
     state = json.loads(body["files"]["metascience/state.json"])
     state["grants"] = {"analysis": "d" * 32}
+    state["analysis_policy"] = "selected-research-max20-1"
     state["scopes"] = [{"host": "claude", "source_id": "current-source"}]
     sample = state["samples"].pop("2026-10-19")
     sample.update(
