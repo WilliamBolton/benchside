@@ -44,7 +44,7 @@ def _hook(monkeypatch, event, project, **payload):
     return main(["hook", event])
 
 
-def test_expired_registration_and_pointer_are_not_adopted(session_project, monkeypatch):
+def test_expired_registration_is_not_adopted_but_explicit_pointer_survives(session_project, monkeypatch):
     paths, project_id, _ = session_project
     now = time.time()
     register_session(paths, project_id, "crashed")
@@ -56,7 +56,7 @@ def test_expired_registration_and_pointer_are_not_adopted(session_project, monke
     assert runtime.read_pointer(paths, project_id) is None
     assert current_session(paths, project_id) is None
     assert not (paths.home / "projects/research/current-session").exists()
-    assert (paths.home / "sessions/crashed.ended").is_file()
+    assert (paths.home / "sessions/crashed.json").is_file()
     assert journal.read_text() == "private scientific records remain here\n"
 
 
@@ -93,7 +93,7 @@ def test_new_cli_record_after_expiry_does_not_use_the_crashed_conversation(
     assert events[0]["session"] == "crashed"
     assert events[1]["session"] is None
     assert all(event["type"] == "ConsultationOpened" for event in events)
-    assert json.loads((paths.home / "sessions/crashed.ended").read_text()) == original
+    assert json.loads((paths.home / "sessions/crashed.json").read_text()) == original
     assert (
         json.loads((paths.home / "sessions/local.json").read_text())["sitting_id"]
         != original["sitting_id"]

@@ -40,18 +40,20 @@ def _session_file(paths: Paths, project_id: ProjectId):
 
 def register_session(paths: Paths, project_id: ProjectId, session_id: str) -> None:
     validate_session_id(session_id)
-    path = _session_file(paths, project_id)
-    with file_lock(path.with_suffix(".lock")):
-        sessions = _registered(path)
-        sessions[session_id] = time.time()
-        _prune_expired(paths, project_id, sessions)
-        _save_registered(path, sessions)
     # Each Claude session has its own environment file. This avoids the
     # last-started-session race of a shared per-project current-session file.
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with Path(env_file).open("a", encoding="utf-8") as handle:
             handle.write(f"\nexport CLAUDE_SESSION_ID={shlex.quote(session_id)}\n")
+    # The registry is only a fallback. A damaged registry must not prevent
+    # Claude from giving this conversation its explicit, authoritative ID.
+    path = _session_file(paths, project_id)
+    with file_lock(path.with_suffix(".lock")):
+        sessions = _registered(path)
+        sessions[session_id] = time.time()
+        _prune_expired(paths, project_id, sessions)
+        _save_registered(path, sessions)
 
 
 def clear_session(paths: Paths, project_id: ProjectId, session_id: str) -> None:
@@ -66,11 +68,9 @@ def clear_session(paths: Paths, project_id: ProjectId, session_id: str) -> None:
 
 
 def clear_project_sessions(paths: Paths, project_id: ProjectId) -> None:
-    """Used when removing lifecycle hooks; never clear another project's state."""
+    """Remove fallback registrations, preserving explicitly addressed conversations."""
     path = _session_file(paths, project_id)
     with file_lock(path.with_suffix(".lock")):
-        for session_id in _registered(path):
-            retire_session_pointer(paths, session_id, project_id=project_id)
         path.unlink(missing_ok=True)
 
 
@@ -161,11 +161,11 @@ def _registered(path: Path) -> dict[str, float]:
                 isinstance(timestamp, bool)
                 or not isinstance(timestamp, (int, float))
                 or timestamp < 0
-                or timestamp > now
+                or timestamp > now + 300
                 or not math.isfinite(timestamp)
             ):
-                raise ValueError("timestamps must be finite past or present Unix times")
-            result[name] = float(timestamp)
+                raise ValueError("timestamps must be finite Unix times with at most 5 minutes skew")
+            result[name] = min(float(timestamp), now)
         return result
     except FileNotFoundError:
         return {}
@@ -191,6 +191,7 @@ def _prune_expired(paths: Paths, project_id: ProjectId, sessions: dict[str, floa
     cutoff = time.time() - _REGISTRATION_LIFETIME_SECONDS
     expired = [name for name, timestamp in sessions.items() if timestamp <= cutoff]
     for name in expired:
-        retire_session_pointer(paths, name, project_id=project_id)
+        # Expiry makes anonymous fallback unsafe; it does not mean the actual
+        # conversation ended. Its pointer remains accessible only by its ID.
         del sessions[name]
     return bool(expired)
