@@ -131,7 +131,9 @@ artifact directory. No raw research conversations or participant data were used.
 ## Outstanding
 
 - Complete approved cleanup of the seven registered synthetic objects.
-- Recheck the focused 0.1.5 usability changes below in the installed apps before outreach.
+- Review the installed 0.1.5 results below, particularly Claude's save latency,
+  before outreach. The optional failed-invitation save has local regression
+  coverage but was not repeated in the installed apps in the focused check.
 - A Vercel viewer, real research catalogue, validated activity classifier and
   scheduled invitations have not been deployed or evaluated in this test.
 
@@ -175,11 +177,53 @@ in fresh processes as well as the existing role, memory and consent checks.
 All three 0.1.5 archive smoke checks passed with submission endpoints disabled;
 the 443-test client suite, lint and generated-role freshness checks passed.
 
-Installed Claude/ChatGPT remain at their last tested 0.1.4 release until updated.
-No cloud speed improvement is claimed from local tests. After updating, run one
-normal methods discussion against a populated synthetic notebook: save a record
-and decision together, restore in a fresh chat, retrieve an older decision and
-record elapsed time. Check whether that host actually supports exact file transfer;
-if not, retain guarded readback and report the remaining tool limitation. Also
-exercise one failed-fetch save without resetting its cooldown. These checks do
-not require reopening the live test catalogue or sending more test submissions.
+## Installed 0.1.5 focused check
+
+Both installed packages were updated to 0.1.5 and their runtime version actions
+verified. The OpenAI plugin remains private to the existing account; its new
+release is `pluginrel_6ae1fb51270c8191b18d497fbf2df344`. Claude's plugin UI also
+confirmed the update. The wheel SHA-256 is
+`3df678e939e755028d99f82248bac667f6555ba7cbb62184c896f0986d611ac2`.
+GitHub CI passed on source commit `45ee18b` for Python 3.11 and 3.14
+([run 40696113213](https://github.com/WilliamBolton/benchside/actions/runs/40696113213)).
+
+Each app resumed its existing populated synthetic notebook, recorded one methods
+summary and one decision in one batch, saved the notebook once with guards and
+readback, and refreshed its readable journal once. The scenario used three donors
+with paired treatments and technical repeats. Both responses kept three donors
+as the independent units and recommended paired pre-/post-extraction controls.
+These are bounded acceptance checks, not scientific-quality evaluation results.
+
+| Check | ChatGPT | Claude |
+| --- | --- | --- |
+| Save and readback | Passed; native revision 11 | Passed; native revision 8 (host document revision 13) |
+| Exact response-file transfer | Installed test reported a working code-to-document bridge | Unsupported by the literal-text document update tool; guarded copy/readback passed |
+| Full-history recall | Retrieved an older decision outside the last-five view | Retrieved an older decision outside the last-five view |
+| Fresh-chat restoration | Passed; new decision and rationale recovered | Passed; new decision and rationale recovered |
+| Preserved history | 8 decisions, 7 records, 7 unresolved questions | 8 decisions, 7 records, 7 unresolved questions |
+| Other project | Project B retained its marker and single record, with no A records | This focused check used one project; earlier isolation evidence remains separate |
+| Consent | All sharing and metascience choices off | All sharing and metascience choices off; no scopes or pending drafts |
+| Save workflow duration | UI: 4m 13s | Runtime-reported: 724s from version check through full-history recall; approximately 13 minutes overall |
+
+Fresh-chat checks read the saved documents rather than using the earlier chats as
+evidence. ChatGPT's read-only check took 2m 14s; Claude's took approximately three
+minutes. No collector submissions, survey catalogue changes, network-setting
+changes or PR merges were made. These runs used different models and populated
+notebooks and are not controlled performance comparisons. Claude's literal-text
+transfer remains a material usability limitation; the new optional file route
+does not remove it in that host.
+
+Evidence: [ChatGPT save](https://chatgpt.com/c/6ae1fe97-49f8-83eb-944d-43efcdd8fdb5),
+[ChatGPT fresh chat](https://chatgpt.com/c/6ae200be-fabc-83eb-82a1-426897d5985a),
+[Claude save](https://claude.ai/chat/1ad70b65-7cac-4432-ae34-25b309938ee7),
+[Claude fresh chat](https://claude.ai/chat/93efc22c-9a35-4677-a9ad-a7e7efe5f4ec).
+These are account-scoped synthetic test chats, not public research data.
+
+Claude's fresh check also found historical prose outside the state block still
+claiming revision 7 and describing the 0.1.4 test. A separate guarded edit removed
+those stale labels and identified the fenced snapshot as authoritative. Complete
+readback confirmed the state block was byte-identical and native revision remained
+8; only the host document revision advanced to 14. No data loss was found.
+No failed-invitation test was sent
+to the live endpoint during this check; the local regression covers preservation
+of its changed state and cooldown, as described above.
