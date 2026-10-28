@@ -148,6 +148,10 @@ def run(collector, *, public=False, keep_alive_seconds=0):
             closes=(today + timedelta(days=1)).isoformat(),
             title=f"Synthetic local check {root.name}",
         )
+        catalog["studies"][0]["questions"].append(
+            {"id": "comment", "type": "text", "prompt": "What was the synthetic problem?",
+             "max_length": 2000}
+        )
         (root / "src/studies.json").write_text(json.dumps(catalog))
         # Build a local-only config: never copy account IDs, routes or cloud environments.
         config = {

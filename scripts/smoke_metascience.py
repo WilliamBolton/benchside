@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from benchside.application.metascience import Metascience, StudyClient
+from benchside.application.sharing import SharingFlow
 from benchside.config import Paths
 from benchside.domain.shared.error import BenchsideError, InfrastructureError
 from benchside.infrastructure.http_sink import HttpExportSink
@@ -40,11 +41,17 @@ def smoke(endpoint):
             },
         )
         flow.consent("invitations", True)
-        invitation = flow.invitations()["invitation"]
+        offered = flow.invitations()
+        invitation = offered["invitation"]
         assert invitation and invitation["id"] == "synthetic-verification", (
             "Use the isolated synthetic catalog"
         )
-        survey = flow.survey("synthetic-verification@1", {"checked": "yes"})
+        flow.join_study("synthetic-verification@1", offered["study_sha256"])
+        text_answer = "Synthetic test only: Fiji channel labels need manual restoration."
+        survey = flow.survey("synthetic-verification@1", {
+            "checked": "yes", "comment": {"text": text_answer}
+        })
+        assert json.loads(survey["payload"])["answers"]["comment"]["text"] == text_answer
         survey_receipt = flow.send(survey["id"], survey["sha256"])
         assert survey_receipt["status"] == "stored"
         assert flow.sinks["surveys"].send(survey["payload"]).status == "duplicate"
@@ -65,6 +72,20 @@ def smoke(endpoint):
                     "outcome": {"value": "not_reported", "basis": "unknown"},
                 },
             )
+        token = next(iter(sample["selected"]))
+        gap = flow.record_gap(sample["week"], token,
+                              {"kind": "manual_toil", "task": text_answer,
+                               "frequency": "Synthetic only"}, "researcher_reported")
+        sharing = SharingFlow(flow.paths, sinks={
+            "gaps": HttpExportSink(f"{endpoint}/v1/gaps", allow_local=True)
+        })
+        sharing.set_consent("gaps", True, kinds=["manual_toil"])
+        gap_draft = sharing.prepare("gaps")[0]
+        gap_payload = json.loads(gap_draft.preview.payload)
+        assert gap_payload["observations"][0]["id"] == gap["recorded"]
+        assert gap_payload["observations"][0]["origin"] == "selected_conversation"
+        sharing.send(gap_draft.id, gap_draft.preview.payload_sha256)
+        assert sharing.sinks["gaps"].send(gap_draft.preview.payload).status == "duplicate"
         flow.consent("sharing", True)
         activity = flow.preview_activity(sample["week"])
         activity_receipt = flow.send(activity["id"], activity["sha256"])
@@ -85,12 +106,17 @@ def smoke(endpoint):
             pass
         else:
             raise AssertionError("Revocation did not block submission")
-        assert not (flow.path.parent.parent / "reporting/installation.json").exists()
+        identity = json.loads((flow.path.parent.parent / "reporting/installation.json").read_text())
+        assert identity["id"] == gap_payload["contributor_id"]
+        assert identity["id"] == json.loads(survey["payload"])["contributor_id"]
+        assert identity["id"] == json.loads(activity["payload"])["contributor_id"]
         print(
             json.dumps(
                 {
                     "catalog": "synthetic invitation retrieved",
-                    "surveys": "stored; duplicate retry verified",
+                    "surveys": "agreed before answering; exact free text stored; retry verified",
+                    "selected_conversation_gap": "reviewed v2 gap stored; retry verified",
+                    "pseudonymous_linkage": "same store ID across the three opted-in channels",
                     "activity": "20 selected sessions stored; duplicate retry verified",
                     "forbidden_transcript": "HTTP 422",
                     "revoked_sharing": "blocked before HTTP",
