@@ -6,6 +6,13 @@ arrives. The rollout is informal; no fixed cohort or required follow-up session.
 
 ## Current verification
 
+**28 October update:** [live acceptance results](acceptance-2026-10-28.md)
+supersede the deployment and 0.1.3 update blockers in the historical notes below.
+All five routes now have private EU storage and verified synthetic receipts.
+The client is 0.1.4 (435 passing tests), and the receiver has 56 passing tests plus
+its type check. The installed app results and remaining host limitations are
+recorded in that report. No PR has been merged and no research rollout has begun.
+
 See the [27 October release review](release-review-2026-10-27.md) for the current
 0.1.3 review package, executable checks, independent review findings and remaining
 release gates. Installed 0.1.1 passed fresh-chat native restoration and guarded

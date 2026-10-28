@@ -38,10 +38,10 @@ repository. Native memory uses a private notebook in ChatGPT Space (or compatibl
 Claude Docs), with readable journals per project. Guarded saves and readback
 protect the validated record; the execution sandbox is disposable. Both installed
 plugins passed synthetic native saves and fresh-chat restoration on 23 October.
-Shared Google storage passed a synthetic continuation on 27 October: Claude's
-installed 0.1.1 plugin resumed the project saved by ChatGPT through Google Docs.
-The rebuilt 0.1.3 review update still needs installed-app acceptance.
-See the [rollout checks](docs/rollout.md) before
+The 0.1.4 update passed native saves in both installed apps on 28 October and
+Claude continued the existing shared Google notebook with a guarded update.
+See the [28 October acceptance report](docs/acceptance-2026-10-28.md) for current
+results and host limitations, and the [rollout checks](docs/rollout.md) before
 inviting researchers through a particular app route.
 
 A research sitting can continue across conversations. New roles save an
@@ -83,8 +83,10 @@ submission needs an exact preview and approval.
   operator-assisted removal of earlier submissions.
 
 The Science Works endpoint is included in the product; researchers configure no
-credentials. **Feedback and usage routes must be deployed from the companion
-`science-works/benchside-ingest` repository before receiving real submissions.**
+credentials. All five collection routes from the companion
+`science-works/benchside-ingest` repository were deployed and verified with
+synthetic records on 28 October. App network access and research release checks
+still apply; deployment does not authorise collection from researchers.
 
 ## Optional studies and wider observation
 
@@ -100,7 +102,7 @@ raw logs or installation/project/conversation identifiers. A centrally published
 catalog supports new surveys without reinstalling the client.
 
 See [the metascience implementation and review guide](docs/metascience.md).
-The survey/activity routes still require deployment. The catalog starts empty,
+The survey/activity routes are deployed. The released catalog starts empty,
 and installation creates no background listener or schedule. Scheduled checks
 depend on explicit researcher setup and the host's available tools.
 
@@ -168,9 +170,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.1.3.zip` (standalone skill),
-`dist/benchside-plugin-0.1.3.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.1.3.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.1.4.zip` (standalone skill),
+`dist/benchside-plugin-0.1.4.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.1.4.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.
