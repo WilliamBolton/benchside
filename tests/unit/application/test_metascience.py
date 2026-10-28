@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError as SchemaError
 
+from benchside import __version__
 from benchside.application.app import App
 from benchside.application.metascience import Metascience, StudyClient
 from benchside.application.native import reference, run_native
@@ -449,6 +450,7 @@ def test_study_client_sends_no_identifiers_and_rejects_oversized_catalog():
         def open(self, request, timeout):
             assert request.full_url == "https://collector.example/v1/studies"
             assert request.data is None and request.get_method() == "GET" and timeout == 10
+            assert request.get_header("User-agent") == f"Benchside/{__version__}"
             return Response()
 
     with pytest.raises(InfrastructureError):

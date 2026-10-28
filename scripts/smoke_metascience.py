@@ -52,6 +52,7 @@ def smoke(endpoint):
         scope = {"host": "claude", "source_id": "synthetic-project"}
         flow.scopes([scope])
         sample = flow.sample([{"scope": scope, "session_ref": f"synthetic-{i}"} for i in range(21)])
+        assert len(sample["selected"]) == 20, "The automatic sample must respect the 20-session cap"
         for token in sample["selected"]:
             flow.record(
                 sample["week"],
@@ -67,7 +68,7 @@ def smoke(endpoint):
         flow.consent("sharing", True)
         activity = flow.preview_activity(sample["week"])
         activity_receipt = flow.send(activity["id"], activity["sha256"])
-        assert activity_receipt["status"] == "stored" and activity_receipt["observations"] == 3
+        assert activity_receipt["status"] == "stored" and activity_receipt["observations"] == 20
         assert flow.sinks["activity"].send(activity["payload"]).status == "duplicate"
         invalid = json.loads(activity["payload"])
         invalid["transcript"] = "Synthetic forbidden field"
@@ -90,7 +91,7 @@ def smoke(endpoint):
                 {
                     "catalog": "synthetic invitation retrieved",
                     "surveys": "stored; duplicate retry verified",
-                    "activity": "3 selected sessions stored; duplicate retry verified",
+                    "activity": "20 selected sessions stored; duplicate retry verified",
                     "forbidden_transcript": "HTTP 422",
                     "revoked_sharing": "blocked before HTTP",
                     "production_requests": 0,

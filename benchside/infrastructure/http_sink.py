@@ -7,11 +7,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from benchside import __version__
 from benchside.domain.export.model.value import DeliveryReceipt
 from benchside.domain.export.model.wire import MAX_BYTES
 from benchside.domain.shared.error import ConfigurationError, InfrastructureError
 
 COLLECTOR = "https://ingest.benchside.science.works"
+USER_AGENT = f"Benchside/{__version__}"
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -52,6 +54,7 @@ class HttpExportSink:
             headers={
                 "Content-Type": "application/json; charset=utf-8",
                 "Accept": "application/json",
+                "User-Agent": USER_AGENT,
             },
         )
         try:

@@ -32,7 +32,7 @@ from benchside.domain.export.model.metascience import (
 )
 from benchside.domain.shared.error import ConsentRequiredError, InfrastructureError, ValidationError
 from benchside.infrastructure.files import atomic_json
-from benchside.infrastructure.http_sink import COLLECTOR, HttpExportSink
+from benchside.infrastructure.http_sink import COLLECTOR, USER_AGENT, HttpExportSink
 
 
 class StudyClient:
@@ -48,7 +48,10 @@ class StudyClient:
 
     def fetch(self):
         try:
-            request = Request(self.transport.destination, headers={"Accept": "application/json"})
+            request = Request(
+                self.transport.destination,
+                headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+            )
             with self.transport._opener.open(request, timeout=10) as response:
                 raw = response.read(131073)
                 if response.status != 200 or len(raw) > 131072:

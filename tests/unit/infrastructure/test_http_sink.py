@@ -5,6 +5,7 @@ from urllib.error import HTTPError
 
 import pytest
 
+from benchside import __version__
 from benchside.domain.shared.error import BenchsideError
 from benchside.infrastructure.http_sink import HttpExportSink
 
@@ -44,6 +45,7 @@ def test_exact_bytes_and_verified_receipt(status):
     assert opener.requests[0].data == PAYLOAD.encode("utf-8")
     assert receipt.sha256 == hashlib.sha256(PAYLOAD.encode("utf-8")).hexdigest()
     assert opener.requests[0].get_method() == "POST"
+    assert opener.requests[0].get_header("User-agent") == f"Benchside/{__version__}"
 
 
 @pytest.mark.parametrize(
