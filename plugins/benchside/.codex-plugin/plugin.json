@@ -1,6 +1,6 @@
 {
   "name": "benchside",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Seven scientific colleagues with private project records and optional research-workflow reporting.",
   "author": {
     "name": "Science Works"
@@ -8,7 +8,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Benchside",
-    "shortDescription": "Think through research with seven scientific colleagues.",
+    "shortDescription": "Research colleagues and memory",
     "longDescription": "Study design, methods troubleshooting, results, reproducibility, journal club, peer review and supervision. Guided setup, project records and optional reporting.",
     "developerName": "Science Works",
     "category": "Productivity",

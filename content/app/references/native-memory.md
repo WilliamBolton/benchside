@@ -157,6 +157,23 @@ projects for that document, select the intended existing project ID explicitly.
 
 ## Record, save, verify
 
+### Transfer the generated state as data
+
+When the host supports a file-to-tool argument bridge, run the bundled launcher
+with `--response-file` and a fresh absolute filename in a private working directory.
+Load the complete response as JSON and pass its `result.markdown` value directly
+to the observed guarded document operation. Do not print and retype the compressed
+payload or construct a new snapshot by hand. The printed `candidate` is just the
+expected workspace/revision/digest for `native.confirm`; the full snapshot is in
+the response file. Keep that file until readback confirms the save.
+
+This option does not add document access. Inspect the actual host tools: a path
+string is not document content, and a tool that only accepts literal text does not
+automatically read files. Where exact file transfer is unavailable, use the exact
+returned Markdown with the existing guard and complete readback; do not claim the
+copying limitation is solved. A checksum mismatch still requires recovery before
+continuing. Never relax a write guard or the confirmation check to speed up saving.
+
 ### Group private work from the same turn
 
 Prefer `native.batch` when several private actions are already justified by the
@@ -164,6 +181,12 @@ current user turn. It restores once and returns one candidate snapshot for one
 guarded save/readback, then one readable-journal refresh. Do not save or refresh
 the readable journal between these steps. Never defer records across user turns
 or invent answers to complete a batch. Read-only batches require no save.
+For ordinary private recording, reuse the complete readback and its current guard
+from the last confirmed save in this conversation instead of immediately reading
+the same block again. Reread on a new conversation, execution reset or conflict,
+and immediately before any submission to recheck current consent. A stale guard
+must still fail. Refresh the derived journal once after a group of scientific
+records changes, not for consent-only changes or every read-only recall.
 
 It takes the same `document`, `workspace_id` and `operation_id` as `native.run`,
 plus 1–16 `steps`. Each has a unique short `id`, an ordinary `request`, and a
@@ -256,7 +279,9 @@ rejected while retained; an expired ID fails closed instead of repeating it.
 2. Execute `native.run`. Check both the outer script `ok` and the inner result's
    `ok`. The response contains a candidate `snapshot`, `markdown`, `base`,
    `changed`, and possibly a `project_journal`. None is a persistence receipt.
-3. If `changed:true`, conditionally replace the state block using the retained
+3. **If `changed:true`, save even if the inner `ok` is false.** Failed requests
+   can still update cooldowns or failure counters. Do not discard that candidate
+   or return early because of the action error. Conditionally replace the state block using the retained
    guard. Preserve all unrelated blocks. Do not rewrite a whole Page.
 4. Read back the state block. Call `native.confirm` with the candidate's
    workspace ID, revision and digest. Only `saved:true` confirms the save.
@@ -266,6 +291,11 @@ rejected while retained; an expired ID fails closed instead of repeating it.
    update fails, the notebook is still saved; refresh through `recall` next time.
 6. Explain an inner action failure accurately. A candidate can contain failure
    counters even when the action failed; saving those does not make it succeed.
+
+Quote saved revision numbers only from the latest successful `native.confirm` or
+fresh `native.inspect`. Keep the private index to document IDs/links, not copied
+revision numbers. Generated journals identify their snapshot revision and may lag
+the notebook after a consent or survey action; they are not a live save indicator.
 
 If `changed:false`, no notebook write is needed. `native.run` uses a fresh
 temporary directory every time and deletes it afterwards. Native cloud requests

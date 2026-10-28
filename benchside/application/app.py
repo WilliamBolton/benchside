@@ -251,7 +251,12 @@ class App:
         project_title = config.get("title")
 
         def recalled():
-            result = recall.run(RecallProject(project_id=project_id)).model_dump(mode="json")
+            result = recall.run(
+                RecallProject(
+                    project_id=project_id,
+                    history=request.get("history", "recent") if action == "recall" else "recent",
+                )
+            ).model_dump(mode="json")
             if project_title:
                 result["title"] = project_title
             return result

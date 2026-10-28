@@ -1,5 +1,6 @@
 """Run the installed source or packaged runtime with one JSON request on stdin."""
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -32,11 +33,7 @@ def private_cache_directory(identity):
         except FileExistsError:
             pass
         info = directory.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.getuid()
-            or info.st_mode & 0o077
-        ):
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise RuntimeError("Runtime cache must be a private, owned directory without symlinks")
     return directory
 
@@ -110,7 +107,10 @@ def run_source(request, source):
             raise ValueError("The saved Benchside source is unavailable")
         response = subprocess.run(
             [
-                str(interpreter), "-I", "-c",
+                str(interpreter),
+                "-I",
+                "-B",
+                "-c",
                 (
                     "import sys; sys.path.insert(0, sys.argv[1]); "
                     "from benchside.application.bridge import main; raise SystemExit(main())"
@@ -127,14 +127,15 @@ def run_source(request, source):
         if not isinstance(result, dict) or type(result.get("ok")) is not bool:
             raise ValueError("The installed runtime did not return a valid response")
     except (OSError, KeyError, TypeError, ValueError) as error:
-        raise RuntimeError(f"Benchside's source runtime could not start: {error}. {repair}") from error
+        raise RuntimeError(
+            f"Benchside's source runtime could not start: {error}. {repair}"
+        ) from error
     except subprocess.TimeoutExpired as error:
         raise RuntimeError(
             "Benchside's source runtime timed out. Check the saved records before retrying; "
             "the action may already have completed."
         ) from error
-    print(json.dumps(result, ensure_ascii=False))
-    return 0 if result["ok"] else 1
+    return result
 
 
 def bootstrap():
@@ -202,14 +203,24 @@ def bootstrap():
                 if not key.startswith(("PIP_", "UV_")) or key == "UV_CACHE_DIR"
             }
             environment.update(
-                PIP_CONFIG_FILE=os.devnull, UV_OFFLINE="true", UV_NO_CONFIG="true", UV_LINK_MODE="copy"
+                PIP_CONFIG_FILE=os.devnull,
+                UV_OFFLINE="true",
+                UV_NO_CONFIG="true",
+                UV_LINK_MODE="copy",
             )
             subprocess.run(
                 installer
                 + [
-                    "--target", str(site), "--no-index", "--no-deps",
-                    "--find-links", str(wheelhouse), "--only-binary=:all:",
-                    "--require-hashes", "-r", str(requirements),
+                    "--target",
+                    str(site),
+                    "--no-index",
+                    "--no-deps",
+                    "--find-links",
+                    str(wheelhouse),
+                    "--only-binary=:all:",
+                    "--require-hashes",
+                    "-r",
+                    str(requirements),
                 ],
                 check=True,
                 env=environment,
@@ -234,28 +245,67 @@ def bootstrap():
     sys.path.insert(0, str(site))
 
 
-def main():
+def response_summary(response, path):
+    """Keep opaque native state in the file, not in the model's copy buffer."""
+    summary = {**response, "response_file": str(path)}
+    result = response.get("result")
+    if isinstance(result, dict) and "snapshot" in result and "markdown" in result:
+        summary["result"] = {k: v for k, v in result.items() if k not in {"snapshot", "markdown"}}
+        summary["result"]["candidate"] = {
+            key: result["snapshot"][key] for key in ("workspace_id", "revision", "sha256")
+        }
+    return summary
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--response-file", type=Path, help="new private file for the complete response"
+    )
+    args = parser.parse_args(argv or [])
+    output = None
     try:
+        if args.response_file:
+            if not args.response_file.is_absolute():
+                raise ValueError(
+                    "Use an absolute response-file path in a private working directory"
+                )
+            # Reserve before running anything: a bad destination must not trigger
+            # a submission, and retries must never overwrite an unsaved candidate.
+            descriptor = os.open(args.response_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            output = os.fdopen(descriptor, "w", encoding="utf-8")
         request = json.load(sys.stdin)
         if not isinstance(request, dict) or not isinstance(request.get("action"), str):
             raise TypeError("Provide a JSON object with an action")
         source = Path(__file__).resolve().parents[1] / "runtime/source.json"
         if source.is_file():
-            return run_source(request, source)
-        bootstrap()
-        from benchside.application.bridge import run
+            response = run_source(request, source)
+        else:
+            bootstrap()
+            from benchside.application.bridge import run
 
-        result = run(request)
-        print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
-        return 0
+            response = {"ok": True, "result": run(request)}
     except Exception as error:  # noqa: BLE001 - the process boundary must return a JSON error.
-        print(
-            json.dumps(
-                {"ok": False, "error": str(error), "code": getattr(error, "code", "setup_failed")}
-            )
-        )
-        return 1
+        response = {
+            "ok": False,
+            "error": str(error),
+            "code": getattr(error, "code", "setup_failed"),
+        }
+    displayed = response
+    if output is not None:
+        try:
+            with output:
+                json.dump(response, output, ensure_ascii=False)
+                output.flush()
+                os.fsync(output.fileno())
+            displayed = response_summary(response, args.response_file)
+        except OSError as error:
+            # The action may have completed; preserve its full result/receipt on
+            # stdout rather than implying it failed and inviting a duplicate send.
+            displayed = {**response, "response_file_error": str(error)}
+    print(json.dumps(displayed, ensure_ascii=False))
+    return 0 if response["ok"] else 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

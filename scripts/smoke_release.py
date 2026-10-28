@@ -43,9 +43,9 @@ def smoke(archive_path: Path):
         env.pop("BENCHSIDE_REPO", None)
         env.pop("PYTHONPATH", None)
 
-        def run(request):
+        def run(request, *options):
             result = subprocess.run(
-                [sys.executable, str(entry)],
+                [sys.executable, str(entry), *options],
                 cwd=root,
                 env=env,
                 input=json.dumps(request),
@@ -59,6 +59,26 @@ def smoke(archive_path: Path):
             response = json.loads(result.stdout)
             assert response["ok"], response
             return response["result"]
+
+        manifest = json.loads((entry.parent.parent / "runtime/manifest.json").read_text())
+        assert run({"action": "version"}) == {"version": manifest["version"]}
+        assert run({"action": "version"}) == {"version": manifest["version"]}
+        assert not (root / "default-data").exists()
+        transfer = root / "native-response.json"
+        summary = run({"action": "native.create"}, "--response-file", str(transfer))
+        complete = json.loads(transfer.read_text())["result"]
+        assert "snapshot" not in summary and "markdown" not in summary
+        assert not complete["saved"]
+        assert transfer.stat().st_mode & 0o077 == 0
+        assert run(
+            {
+                "action": "native.confirm",
+                "workspace_id": summary["candidate"]["workspace_id"],
+                "document": complete["markdown"],
+                "expected": summary["candidate"],
+            }
+        )["saved"]
+        print("Read-only version checks and exact native response-file transfer passed.")
 
         probe = run({"action": "storage.configure", "directory": str(root / "private-records")})
         assert (

@@ -14,6 +14,13 @@
     "record_kind": "study-design"
   },
   {
+    "role": "study-design",
+    "prompt": "Synthetic pilot: three donors each provide a treated and untreated sample, each measured six times technically. Can I count these as 36 independent samples and just add a donor random effect?",
+    "must_notice": ["Three independent donors with paired conditions", "Start with donor-level summaries and paired differences", "Between-donor variance is weakly estimated with so few donors; model choice depends on the inferential goal"],
+    "must_avoid": ["Treating technical replicates as independent donors", "Promising a random effect solves the small-sample problem", "Claiming mixed models are universally invalid below five groups"],
+    "record_kind": "study-design"
+  },
+  {
     "role": "methods-clinic",
     "prompt": "Extraction recovery fell from 80% to 20%. A post-extraction spike is detected normally. We have not tried a pre-extraction spike. What should we check?",
     "must_notice": ["Detection seems to work for the post-extraction control", "A pre-extraction spike can localise loss"],

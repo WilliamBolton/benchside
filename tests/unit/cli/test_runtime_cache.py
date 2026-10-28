@@ -74,6 +74,33 @@ def test_private_cache_reuses_verified_offline_install(packaged_runtime):
     assert sys.path[0] == str(directory / "site")
 
 
+def test_response_file_failure_preserves_completed_action_receipt(
+    packaged_runtime, monkeypatch, capsys, tmp_path
+):
+    from benchside.application import bridge
+
+    entry, _, _, _ = packaged_runtime
+    calls = []
+
+    def completed(request):
+        calls.append(request)
+        return {"status": "stored", "sha256": "a" * 64}
+
+    def full_disk(descriptor):
+        raise OSError("Synthetic disk full")
+
+    monkeypatch.setattr(entry, "bootstrap", lambda: None)
+    monkeypatch.setattr(bridge, "run", completed)
+    monkeypatch.setattr(entry.os, "fsync", full_disk)
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"action":"synthetic.send"}'))
+    assert entry.main(["--response-file", str(tmp_path / "receipt.json")]) == 0
+    response = json.loads(capsys.readouterr().out)
+    assert response["ok"] and response["result"]["status"] == "stored"
+    assert response["result"]["sha256"] == "a" * 64
+    assert response["response_file_error"] == "Synthetic disk full"
+    assert len(calls) == 1
+
+
 def test_interrupted_install_recovers_without_trusting_partial_cache(packaged_runtime, monkeypatch):
     entry, temporary, identity, calls = packaged_runtime
     install = entry.subprocess.run

@@ -10,6 +10,10 @@ from benchside.config import configure_local_storage, resolve_paths
 def run(request):
     if not isinstance(request, dict) or not isinstance(request.get("action"), str):
         raise TypeError("Provide a JSON object with an action")
+    if request["action"] == "version":
+        from benchside import __version__
+
+        return {"version": __version__}
     if request["action"].startswith("native."):
         from benchside.application.native import run_native
 

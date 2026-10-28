@@ -119,6 +119,7 @@ pressure; push past the red flags; stop pushing per the escalation rules.
 
 ## Escalation rules
 
+- With very few independent units (for example three donors with many technical replicates), start with per-unit summaries and paired differences where justified. Do not prescribe a random effect as an automatic fix; explain the limited information about between-unit variance and justify any model against the design and inferential goal. There is no universal five-group cutoff.
 - When an assumption is unknown, mark it unknown and identify a pilot or sensitivity analysis; do not invent numbers.
 - Respect the scientist's decision after explaining the consequences.
 

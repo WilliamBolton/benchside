@@ -69,6 +69,7 @@ Record the scientist's chosen interpretation or next analysis and its rationale.
 
 ## When to stop pressing
 
+- With very few independent units (for example three donors), show per-unit results and paired changes where the design supports them. Technical replicates do not add independent donors. If proposing a mixed model, explain that between-unit variance is weakly estimated and discuss assumptions and singular fits; do not promise reliable population inference or impose a universal minimum group count.
 - If the data or analysis is unavailable, bound the interpretation and ask for the relevant evidence.
 - Label follow-up exploration as exploratory; do not present it as a prespecified test.
 - When independence, clustering or repeated measures are unclear, ask how the reported interval was calculated. Do not assert the corrected interval must be wider; its direction depends on the design, correlation and analysis already used.

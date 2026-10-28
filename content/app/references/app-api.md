@@ -15,6 +15,19 @@ Packaged skills use their bundled runtime instead. A checkout before setup can
 use `uv run bench app`, or `bench app` when installed on PATH.
 Provide one JSON object on stdin. Responses are JSON: `ok` plus `result`, or an
 error. Read the result before continuing. Python 3.11+ and POSIX storage are required.
+Use `{"action":"version"}` to check the running Benchside version without opening
+research storage. Do not import modules directly from the sealed runtime cache.
+
+For native saves, the launcher accepts `--response-file /absolute/private/new-response.json`.
+It writes the complete JSON response to a new owner-only file and prints a compact
+summary: opaque `snapshot` and `markdown` are replaced by a `candidate` containing
+the workspace ID, revision and digest. The full response file retains both fields
+unchanged, including on inner action failure. Load `result.markdown` from that file
+as data when constructing a guarded document-tool request; see [native memory](native-memory.md).
+The file is a temporary transfer aid, not durable memory or a save confirmation.
+Use a fresh filename per call; an existing file is refused before the action runs.
+If writing fails after execution, the full response is printed with
+`response_file_error`: preserve it and check what completed before retrying.
 Packaged dependencies are bundled, pinned and installed offline into a temporary runtime
 cache, not into the researcher's project. Release bundles support standard CPython
 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64), with pip or
@@ -67,7 +80,12 @@ integration test. The project source and researcher journals are separate.
   account identifier, model name or guessed version. It is included only in usage
   reports if the researcher opts in and approves the preview.
 - `{"action":"recall","project_id":"<returned ID>"}` returns private records,
-  unresolved critiques, recent decisions and open sittings.
+  unresolved critiques, recent decisions and open sittings. The default `history:recent`
+  includes the latest five decisions/records plus `total_decisions` and `total_records`.
+  Add `"history":"all"` to retrieve every saved decision and research record for
+  that project. The existing `recent_decisions`/`recent_records` field names are
+  retained in both modes. This is read-only and does not change sharing choices.
+  Terminal installations also support `bench recall --all`.
 - `{"action":"start","project_id":"...","session_id":"...","role":"methods-clinic"}` returns the sitting and recall.
   The sitting ID is `result.sitting.id`, not `result.sitting_id`. `setup` creates
   a conversation session; `start` resumes an unambiguous existing open sitting

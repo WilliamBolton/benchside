@@ -602,14 +602,20 @@ def _quote(text):
     return "\n".join("> " + line for line in str(text).splitlines())
 
 
-def journal_view(app, project_id, projects, revision):
-    recall = app.run({"action": "recall", "project_id": project_id})
+def journal_view(app, project_id, projects, revision, history="recent"):
+    recall = app.run({"action": "recall", "project_id": project_id, "history": history})
     lines = [
-        f"Saved notebook revision: {revision}.",
+        f"Snapshot revision: {revision}.",
         (
-            "This page is a readable view. Benchside restores the validated private notebook; "
+            "This page is a readable view of that snapshot, not a live save status. "
+            "Benchside checks the private notebook for the current saved revision; "
             "ask Benchside to record corrections so history is preserved."
         ),
+        (
+            f"Showing {len(recall['recent_decisions'])} of {recall['total_decisions']} decisions "
+            f"and {len(recall['recent_records'])} of {recall['total_records']} research records. "
+            + ("Ask Benchside for all history to see older entries." if history == "recent" else "")
+        ).strip(),
         "## Current hypothesis",
         _quote(recall["current_hypothesis"]) if recall["current_hypothesis"] else "None recorded.",
         "## Unresolved questions",
@@ -617,10 +623,11 @@ def journal_view(app, project_id, projects, revision):
     ]
     if not recall["open_questions"]:
         lines.append("None recorded.")
-    lines.append("## Recent decisions")
+    label = "All" if history == "all" else "Recent"
+    lines.append(f"## {label} decisions")
     for decision in recall["recent_decisions"]:
         lines.extend([_quote(decision["decision"]), _quote(decision["rationale"])])
-    lines.append("## Recent research records")
+    lines.append(f"## {label} research records")
     for record in recall["recent_records"]:
         lines.append(_quote(record["summary"]))
         lines.extend(_quote(detail) for detail in record["details"])
@@ -923,7 +930,13 @@ def run_native(request):
         project_id = (result or {}).get("project_id") if isinstance(result, dict) else None
         project_id = project_id or command.get("project_id")
         view = (
-            journal_view(app, project_id, body["projects"], candidate["revision"])
+            journal_view(
+                app,
+                project_id,
+                body["projects"],
+                candidate["revision"],
+                command.get("history", "recent") if command["action"] == "recall" else "recent",
+            )
             if not candidate_failed and project_id in body["projects"]
             else None
         )

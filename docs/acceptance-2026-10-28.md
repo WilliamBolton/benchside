@@ -131,6 +131,55 @@ artifact directory. No raw research conversations or participant data were used.
 ## Outstanding
 
 - Complete approved cleanup of the seven registered synthetic objects.
-- Address the native-save and host-error-state usability findings before outreach.
+- Recheck the focused 0.1.5 usability changes below in the installed apps before outreach.
 - A Vercel viewer, real research catalogue, validated activity classifier and
   scheduled invitations have not been deployed or evaluated in this test.
+
+## Focused usability changes after acceptance — 0.1.5
+
+The source and release packages now address the findings without changing storage
+formats, consent, endpoints or survey frequency:
+
+- The existing launcher can save its complete response to a new private file,
+  while printing only the native candidate's revision/digest and useful results.
+  A host with a file-to-tool bridge can pass the exact generated Markdown to its
+  guarded document update. This removes a transcription step where supported;
+  it does not grant connector access or make literal-only tools read files.
+- Guidance batches justified private records, reuses a confirmed readback/guard
+  for the next private update in the same chat, and avoids journal refreshes for
+  consent-only changes. Fresh reads before submissions and conflict checks remain.
+- Failed actions with changed state must still be saved and confirmed. A regression
+  exercises a failed invitation fetch, saves its candidate and restores the daily
+  cooldown with no second network call. Cooldown responses now include the next
+  permitted check time. No manual bypass or background retry was added.
+- Recall offers all saved decisions/research records for the selected project;
+  the ordinary recent view gives counts and explains how to retrieve older entries.
+  The terminal route supports `recall --all`; complete history is read-only.
+- Readable journals label a snapshot revision rather than claiming a live save
+  status. Host guidance uses confirmed state for current revision numbers and
+  keeps changing revision numbers out of the document index.
+- A supported `version` action avoids direct cache imports and opening research
+  storage. The source launcher also disables bytecode writes.
+- Study design, methods and results guidance starts the three-donor example with
+  donor summaries and appropriate paired comparisons, qualifies variance estimation
+  and avoids a blanket minimum-group rule. This distinction follows the scope of
+  [Gomes's simulation study](https://doi.org/10.7717/peerj.12794); it is guidance,
+  not a claim that every small-sample mixed model is invalid. An additional synthetic
+  role-evaluation case records the expected behaviour; it has not been model-scored.
+
+Local checks cover exact transfer and restoration of a populated synthetic notebook,
+owner-only response-file permissions, refusal to overwrite an earlier candidate,
+complete-history project separation, read-only recall and error-state recovery.
+The archive smoke check now exercises version inspection and response-file transfer
+in fresh processes as well as the existing role, memory and consent checks.
+All three 0.1.5 archive smoke checks passed with submission endpoints disabled;
+the 443-test client suite, lint and generated-role freshness checks passed.
+
+Installed Claude/ChatGPT remain at their last tested 0.1.4 release until updated.
+No cloud speed improvement is claimed from local tests. After updating, run one
+normal methods discussion against a populated synthetic notebook: save a record
+and decision together, restore in a fresh chat, retrieve an older decision and
+record elapsed time. Check whether that host actually supports exact file transfer;
+if not, retain guarded readback and report the remaining tool limitation. Also
+exercise one failed-fetch save without resetting its cooldown. These checks do
+not require reopening the live test catalogue or sending more test submissions.

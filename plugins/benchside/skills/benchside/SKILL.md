@@ -35,6 +35,10 @@ read the shared notebook, run the action, conditionally save and verify readback
 Group already justified private actions from the same turn with `native.batch`
 to avoid a separate cloud save for every setup or recording step. Keep submission
 previews and sends separate. Confirm one notebook save before refreshing its journal.
+Use the launcher's `--response-file` option when the host can pass file contents
+directly to its document tools; do not retype encoded state. Save a returned
+`changed:true` candidate even when the inner action failed, then explain the
+failure. A failed action and a failed save are different outcomes.
 A disposable execution folder or uploaded source is not a durable journal.
 Both apps can share one local directory or accessible cloud notebook; separate
 private accounts are not automatically synchronized.
@@ -60,6 +64,10 @@ relevant two roles in plain language. Read only that role's reference:
 | Making methods and analyses repeatable | [Reproducibility auditor](references/roles/repro-check.md) |
 | Critical discussion of accessible papers | [Journal-club discussant](references/roles/journal-club.md) |
 | Scientific review and revision priorities | [Scientific peer reviewer](references/roles/peer-review.md) |
+
+Recall normally shows the latest five decisions and records, with total counts.
+When asked about older work, use `recall` with `history:all` for the selected
+project. Do not describe an item outside the recent view as missing or lost.
 
 Call `start` for the role. It resumes an unambiguous open sitting or starts one.
 Record meaningful scientific transitions as they happen. The adapter validates

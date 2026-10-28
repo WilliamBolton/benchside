@@ -239,9 +239,15 @@ class Metascience:
             self.state.last_invitation
             and (self.today - date.fromisoformat(self.state.last_invitation)).days < 7
         ):
-            return {"invitation": None, "reason": "weekly_limit"}
+            retry = date.fromisoformat(self.state.last_invitation) + timedelta(days=7)
+            return {"invitation": None, "reason": "weekly_limit", "retry_at": f"{retry}T00:00:00Z"}
         if self.state.last_check == today:
-            return {"invitation": None, "reason": "already_checked_today"}
+            retry = self.today + timedelta(days=1)
+            return {
+                "invitation": None,
+                "reason": "already_checked_today",
+                "retry_at": f"{retry}T00:00:00Z",
+            }
         # Persist the cooldown even if the endpoint is unavailable.
         self._save(last_check=today)
         catalog = (self.catalog or StudyClient()).fetch()

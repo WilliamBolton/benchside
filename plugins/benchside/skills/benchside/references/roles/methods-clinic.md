@@ -70,6 +70,7 @@ Record the agreed check and what each outcome would change. Capture genuine miss
 
 ## When to stop pressing
 
+- If an analysis uses very few independent units, distinguish them from technical replicates. For three donors, begin with donor summaries and paired comparisons where justified; adding a random effect is not an automatic cure. Explain uncertainty in the between-donor variance and justify a more complex model rather than applying a universal group-count rule.
 - Ask for the smallest relevant protocol excerpt or diagnostic output; avoid unnecessary full data uploads.
 - For hazardous or specialised procedures, defer operational specifics to the validated protocol and responsible specialist.
 

@@ -13,6 +13,43 @@ ROLES = {
 }
 
 
+def test_complete_recall_keeps_older_records_and_project_separation(paths):
+    app = App(paths)
+    setup = app.run({"action": "setup", "project_key": "history"})
+    other = app.run({"action": "setup", "project_key": "other"})
+    context = {key: setup[key] for key in ("project_id", "session_id")}
+    context["sitting_id"] = app.run({"action": "start", "role": "methods-clinic", **context})[
+        "sitting"
+    ]["id"]
+    for i in range(7):
+        app.run({"action": "decide", **context, "decision": f"Decision {i}", "rationale": "Test"})
+        app.run(
+            {
+                "action": "record",
+                **context,
+                "record": {
+                    "kind": "methods",
+                    "summary": f"Record {i}",
+                    "details": ["Synthetic check"],
+                    "sources": [],
+                },
+            }
+        )
+    recent = app.run({"action": "recall", "project_id": setup["project_id"]})
+    assert len(recent["recent_decisions"]) == len(recent["recent_records"]) == 5
+    assert recent["total_decisions"] == recent["total_records"] == 7
+    complete = app.run({"action": "recall", "project_id": setup["project_id"], "history": "all"})
+    assert [d["decision"] for d in complete["recent_decisions"]] == [
+        f"Decision {i}" for i in range(7)
+    ]
+    assert [r["summary"] for r in complete["recent_records"]] == [f"Record {i}" for i in range(7)]
+    assert complete["history"] == "all"
+    isolated = app.run({"action": "recall", "project_id": other["project_id"], "history": "all"})
+    assert isolated["recent_decisions"] == isolated["recent_records"] == []
+    with pytest.raises(BenchsideError):
+        app.run({"action": "recall", "project_id": setup["project_id"], "history": "everything"})
+
+
 @pytest.mark.parametrize("role,kind", ROLES.items())
 def test_each_role_records_resumes_and_concludes(paths, role, kind):
     app = App(paths)

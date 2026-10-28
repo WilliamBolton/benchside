@@ -170,9 +170,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.1.4.zip` (standalone skill),
-`dist/benchside-plugin-0.1.4.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.1.4.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.1.5.zip` (standalone skill),
+`dist/benchside-plugin-0.1.5.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.1.5.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

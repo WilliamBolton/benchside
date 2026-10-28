@@ -24,9 +24,9 @@ def source_skill(tmp_path, monkeypatch):
     environment = {**os.environ, "PATH": "/usr/bin:/bin"}
     environment.pop("PYTHONPATH", None)
 
-    def launch(request):
+    def launch(request, *options):
         response = subprocess.run(
-            [sys.executable, str(skill / "scripts/benchside_app.py")],
+            [sys.executable, str(skill / "scripts/benchside_app.py"), *options],
             cwd=unrelated,
             env=environment,
             input=json.dumps(request),
@@ -40,6 +40,99 @@ def source_skill(tmp_path, monkeypatch):
         return result
 
     return skill, launch
+
+
+def test_source_version_check_needs_no_research_store(source_skill, tmp_path):
+    from benchside import __version__
+
+    _, launch = source_skill
+    assert launch({"action": "version"})["result"] == {"version": __version__}
+    assert not (tmp_path / "private-records").exists()
+
+
+@pytest.mark.parametrize("populated", [False, True])
+def test_response_file_keeps_exact_native_candidate_without_printing_payload(
+    source_skill, tmp_path, populated
+):
+    from benchside.application.native import reference, run_native
+
+    _, launch = source_skill
+    destination = tmp_path / "candidate ' with spaces.json"
+    request = {"action": "native.create"}
+    if populated:
+        empty = run_native(request)
+        context = {
+            "project_id": {"$ref": "setup.project_id"},
+            "session_id": {"$ref": "setup.session_id"},
+        }
+        steps = [
+            {
+                "id": "setup",
+                "project_document": {"document_id": "synthetic", "title": "Synthetic"},
+                "request": {"action": "setup", "host": "claude", "project_key": "synthetic"},
+            },
+            {"id": "start", "request": {"action": "start", "role": "methods-clinic", **context}},
+        ]
+        for i in range(12):
+            steps.append(
+                {
+                    "id": f"decision{i}",
+                    "request": {
+                        "action": "decide",
+                        **context,
+                        "sitting_id": {"$ref": "start.sitting.id"},
+                        "decision": f"Synthetic Δ decision {i}: compare paired controls",
+                        "rationale": "Separate extraction and detection; retain the donor pairing.",
+                    },
+                }
+            )
+        request = {
+            "action": "native.batch",
+            "document": empty["markdown"],
+            "workspace_id": empty["snapshot"]["workspace_id"],
+            "steps": steps,
+        }
+    summary = launch(request, "--response-file", str(destination))
+    full = json.loads(destination.read_text())
+    assert full["ok"] and not full["result"]["saved"]
+    assert summary["result"]["candidate"] == reference(full["result"]["snapshot"])
+    assert summary["response_file"] == str(destination)
+    assert "payload" not in json.dumps(summary)
+    assert destination.stat().st_mode & 0o077 == 0
+    confirmed = run_native(
+        {
+            "action": "native.confirm",
+            "workspace_id": full["result"]["snapshot"]["workspace_id"],
+            "document": full["result"]["markdown"],
+            "expected": summary["result"]["candidate"],
+        }
+    )
+    assert confirmed["saved"]
+    if populated:
+        assert full["result"]["changed"]
+        restored = run_native(
+            {
+                "action": "native.run",
+                "workspace_id": confirmed["workspace_id"],
+                "document": full["result"]["markdown"],
+                "request": {
+                    "action": "recall",
+                    "project_id": full["result"]["result"]["project_id"],
+                    "history": "all",
+                },
+            }
+        )
+        assert len(restored["result"]["recent_decisions"]) == 12
+        assert restored["result"]["recent_decisions"][0]["decision"].startswith(
+            "Synthetic Δ decision 0"
+        )
+    original = destination.read_bytes()
+    refused = launch(
+        {"action": "setup", "project_key": "must-not-run"}, "--response-file", str(destination)
+    )
+    assert not refused["ok"]
+    assert destination.read_bytes() == original
+    assert not (tmp_path / "private-records").exists()
 
 
 def test_source_launcher_restores_records_from_fresh_processes(source_skill, tmp_path):
@@ -130,7 +223,10 @@ def test_switching_to_shared_entry_preserves_journals_and_custom_skills(
     original_generated = recognized.read_text().replace("disable-model-invocation: true\n", "")
     recognized.write_text(original_generated)
     customized = skills / "methods-clinic/SKILL.md"
-    custom_text = customized.read_text().replace("disable-model-invocation: true\n", "") + "\nMy custom notes\n"
+    custom_text = (
+        customized.read_text().replace("disable-model-invocation: true\n", "")
+        + "\nMy custom notes\n"
+    )
     customized.write_text(custom_text)
     settings_path = project / ".claude/settings.json"
     settings = json.loads(settings_path.read_text())
@@ -142,7 +238,8 @@ def test_switching_to_shared_entry_preserves_journals_and_custom_skills(
     assert main(["init", "--yes"]) == 0
     output = capsys.readouterr().out
     notice = next(
-        line for line in output.splitlines()
+        line
+        for line in output.splitlines()
         if line.startswith("Updated legacy Benchside commands to explicit invocation only:")
     )
     assert "/pi" in notice

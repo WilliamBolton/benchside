@@ -122,7 +122,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skills-dir", type=str, help="skill discovery directory used by this agent")
     p.add_argument("--storage", type=str, help="explicit durable local directory outside Git")
     p.add_argument(
-        "--legacy-cli", action="store_true",
+        "--legacy-cli",
+        action="store_true",
         help="explicit Claude Code CLI role skills and hooks instead of the shared app skill",
     )
     p.set_defaults(run=cmd_init_dispatch)
@@ -142,6 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("recall", help="what a persona reads at the start of a sitting")
     p.add_argument("--project", default=None)
     p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--all", action="store_true", help="include all saved decisions and research records"
+    )
     p.set_defaults(run=cmd_recall)
 
     p = sub.add_parser("session", help="recover a conversation that ended without cleanup")
@@ -619,7 +623,9 @@ def cmd_recall(args) -> int:
     project_id = runtime.resolve_project(args.project)
     container, uow = _uow()
     with container, uow:
-        recall = uow.get(RecallProjectHandler).run(RecallProject(project_id=project_id))
+        recall = uow.get(RecallProjectHandler).run(
+            RecallProject(project_id=project_id, history="all" if args.all else "recent")
+        )
     if args.json:
         print(recall.model_dump_json())
         return 0
@@ -631,6 +637,12 @@ def cmd_recall(args) -> int:
         args.ui.info(f"project '{project_id.root}': no recorded history yet")
         return 0
     args.ui.info(f"project '{recall.title}'")
+    if recall.history == "recent":
+        args.ui.detail(
+            f"showing {len(recall.recent_decisions)}/{recall.total_decisions} decisions and "
+            f"{len(recall.recent_records)}/{recall.total_records} research records; "
+            "use recall --all for older entries"
+        )
     if recall.current_hypothesis:
         args.ui.detail(f"current hypothesis: {recall.current_hypothesis}")
     for q in recall.open_questions:

@@ -67,6 +67,56 @@ class Notebook:
         ]
 
 
+def test_failed_invitation_candidate_is_saved_and_restored_with_cooldown(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from benchside.application.metascience import StudyClient
+    from benchside.domain.shared.error import InfrastructureError
+
+    calls = []
+
+    def unavailable(self):
+        calls.append(True)
+        raise InfrastructureError("Synthetic connection failure")
+
+    monkeypatch.setattr(StudyClient, "fetch", unavailable)
+    notebook = Notebook()
+    notebook.run({"action": "metascience.consent", "choice": "invitations", "enabled": True})
+    failed = notebook.run({"action": "metascience.invitations"})
+    assert not failed["ok"] and failed["changed"]
+    assert "Synthetic connection failure" in failed["error"]
+    assert notebook.confirm(failed)["revision"] == failed["snapshot"]["revision"]
+    restored = notebook.run({"action": "metascience.invitations"})
+    assert restored["result"]["reason"] == "already_checked_today"
+    tomorrow = datetime.now(UTC).date() + timedelta(days=1)
+    assert restored["result"]["retry_at"] == f"{tomorrow}T00:00:00Z"
+    assert len(calls) == 1
+
+
+def test_native_complete_history_is_read_only_and_view_names_its_snapshot_revision():
+    notebook = Notebook()
+    setup = notebook.setup()
+    context = {k: setup[k] for k in ("project_id", "session_id")}
+    context["sitting_id"] = notebook.run({"action": "start", "role": "methods-clinic", **context})[
+        "result"
+    ]["sitting"]["id"]
+    for i in range(7):
+        notebook.run(
+            {"action": "decide", **context, "decision": f"Decision {i}", "rationale": "Test"}
+        )
+    original = notebook.document
+    recent = notebook.run({"action": "recall", "project_id": setup["project_id"]})
+    assert "5 of 7 decisions" in recent["project_journal"]["markdown"]
+    full = notebook.run({"action": "recall", "project_id": setup["project_id"], "history": "all"})
+    assert len(full["result"]["recent_decisions"]) == 7
+    assert "Decision 0" in full["project_journal"]["markdown"]
+    assert "## All decisions" in full["project_journal"]["markdown"]
+    assert (
+        f"Snapshot revision: {full['snapshot']['revision']}" in full["project_journal"]["markdown"]
+    )
+    assert not full["changed"] and notebook.document == original
+
+
 @pytest.mark.parametrize("role,kind", ROLES.items())
 def test_native_roles_restore_without_a_shared_execution_directory(
     role, kind, monkeypatch, tmp_path
@@ -140,7 +190,11 @@ def test_native_recall_and_readable_journal_preserve_the_unresolved_alternative(
     notebook.run(
         {
             "action": "critique",
-            "target": {"kind": "interpretation", "result": "Recovery is 20%", "alternative": question},
+            "target": {
+                "kind": "interpretation",
+                "result": "Recovery is 20%",
+                "alternative": question,
+            },
             **context,
         }
     )
