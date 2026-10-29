@@ -155,6 +155,13 @@ account-wide permission to read conversations.
 
 Follow [sharing](sharing.md) for the first three choices and
 [metascience](metascience.md) for invitations, analysis and sharing workflow categories.
+
+Sending needs network access to `ingest.benchside.science.works`. If the
+researcher turns on any choice that sends data and your commands run in
+Anthropic's cloud (claude.ai or Claude Desktop chat), tell them once how to allow
+that domain (steps in [sharing](sharing.md)); until then, reviewed items stay
+saved and unsent. This never blocks setup. In Claude Code the commands run on
+their own computer, so say nothing. Elsewhere, mention it only if a send is blocked.
 Record only explicit choices with the existing consent actions and persist them
 before enabling the corresponding work. Do not grant every category from a vague
 "yes". Declining or deferring leaves unchosen options off and never blocks setup
