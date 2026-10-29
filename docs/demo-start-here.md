@@ -2,8 +2,11 @@
 
 ## Install
 
-For a colleague with a paid Claude account, give them
-`benchside-claude-plugin-0.3.0.zip`. In Claude: **Customize → Plugins → Upload a
+For a colleague with a paid Claude account, use the newly rebuilt Claude plugin
+after the compatibility PR is merged. The earlier `benchside-claude-plugin-0.3.0.zip`
+does not contain the new file-transfer instructions or runtime size limit. Rebuild
+with a new patch version and verify that installed version before presenting.
+In Claude: **Customize → Plugins → Upload a
 plugin**, choose the ZIP, then Upload. Open Benchside and choose Try in chat.
 They do not need a terminal or API key. The package is a review build, not yet a
 public directory listing. A normal chat prompt cannot silently install a plugin
@@ -30,11 +33,13 @@ invoke Benchside in a fresh conversation and use the prompts below. Codex handle
 the runtime commands; the presenter does not need to type terminal commands.
 Normal host permissions still apply when writing the chosen folder or sending.
 
-Use only invented research and a separate demo store. Claude's larger cloud
-notebooks still have an unresolved exact-transfer problem. Prefer a durable
-local folder in a desktop agent if available, or Will's small ChatGPT notebook
-route. Inline-copy cloud storage is experimental and must be explained. If a
-save fails, call it unsaved; do not pretend a chat transcript proves persistence.
+Use only invented research and a separate demo store. Claude's compatibility PR
+now describes an exact file-transfer route tested with a 52 KB cloud notebook.
+It also enforces Claude Docs' smaller block limit. Use it only after updating
+the installed package, and verify a save and a fresh-chat restore beforehand.
+A local folder in Codex or Claude Code remains an available route using the
+existing runtime. If a save fails, call it unsaved; do not treat chat history as
+proof of persistence.
 
 The host needs permission to reach `https://ingest.benchside.science.works` for
 an approved send. If network access is disabled, leave the preview pending;
@@ -42,12 +47,15 @@ never claim that it reached Cloudflare or weaken host settings automatically.
 This is separate from installing the plugin. No storage/admin credentials go
 into a colleague's plugin.
 
-Status checked at 13:44 UK time, 29 October: the Claude 0.3.0 runtime works, but
-its network setting remains off and its live sending check is blocked. Its
-larger cloud-memory transfer is unresolved. Do not present the full Claude
-browser experience as verified. The standalone local client → receiver → GitHub
-route has passed a synthetic rehearsal; a fresh installed-app walkthrough is
-still a live demonstration, not a guarantee every host has the same permissions.
+Status checked after Claude's 17:10 tests, 29 October: Claude reports successful
+file-based cloud memory transfer and a live approved feedback submission with
+network egress enabled, "Package managers only", and only
+`ingest.benchside.science.works` added to the domain allowlist. Both browser and
+Claude Code feedback receipts were independently found in R2 and excluded from
+research reporting. These tests did not consume the demo marker. Other accounts
+need their own capability check. The updated installed plugin still needs a
+save/restore check after the reviewed rebuild. Do not change another user's
+network settings silently.
 
 Open the waiting GitHub run in the presenter's account:
 https://github.com/LauraRyanSW/tools-science-works/actions/runs/40906605042
@@ -98,9 +106,8 @@ The Vercel view is later work. The updated reporting PR computes summary counts
 and retains each complete submitted problem separately, without summarising its
 wording or combining matching descriptions. Related problems are not yet grouped
 by an LLM. Optional context is retained privately; public-ready reporting remains
-aggregate only. The already-running demo was started on the previous revision,
-which displays exact-description groups; a fresh run after review uses individual
-records. Both retain the full wording and context of the single demo problem.
+aggregate only. The extended watcher uses the individual-observation format and
+retains the full wording and context of the demo problem.
 
 [Successful automatic rehearsal](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40877962796)
 provides a fallback example, clearly labelled as an earlier synthetic test.
