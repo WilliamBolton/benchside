@@ -50,8 +50,8 @@ route has passed a synthetic rehearsal; a fresh installed-app walkthrough is
 still a live demonstration, not a guarantee every host has the same permissions.
 
 Open the waiting GitHub run in the presenter's account:
-https://github.com/LauraRyanSW/tools-science-works/actions/runs/40881134460
-It waits until **17:00 UK time today**, ends after the first matching submission,
+https://github.com/LauraRyanSW/tools-science-works/actions/runs/40906605042
+It waits until **19:00 UK time today**, ends after the first matching submission,
 and shows the result after refreshing the page. Colleagues need repository
 access to open the private report themselves, but the presenter can show it.
 
