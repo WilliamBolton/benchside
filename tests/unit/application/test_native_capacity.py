@@ -2,6 +2,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 import uuid
 import zlib
 
@@ -153,6 +154,54 @@ def test_capacity_preflight_refuses_before_post_and_preserves_approved_draft(mon
     assert not result["ok"] and result["code"] == "native_capacity"
     assert submitted == []
     assert native.unpack(book.document)[1] == before
+
+
+def test_claude_docs_limit_refuses_writes_that_would_not_fit_and_keeps_notebook():
+    book = Notebook()
+    context = book.setup(host="claude")
+    sitting = book.run({"action": "start", "role": "methods-clinic", **context})["result"]
+    workspace = native.unpack(book.document)[0]["workspace_id"]
+    record = {
+        "action": "record",
+        **context,
+        "sitting_id": sitting["sitting"]["id"],
+        "record": {
+            "kind": "methods",
+            "summary": "Synthetic",
+            "details": [os.urandom(10_000).hex() for _ in range(5)],  # ~67 KB encoded.
+            "sources": [],
+        },
+    }
+    before = book.document
+    result = native.run_native(
+        {
+            "action": "native.run",
+            "document": before,
+            "workspace_id": workspace,
+            "document_limit_bytes": 65_536,
+            "request": record,
+        }
+    )
+    assert not result["ok"] and result["code"] == "native_capacity"
+    assert not result["changed"] and result["markdown"] == before
+    assert result["capacity"]["document_limit_bytes"] == 65_536
+    # Without a host limit the same write still fits the original allowance.
+    assert book.run(record)["changed"]
+
+
+@pytest.mark.parametrize("limit", [1024, 190_001, "65536", True])
+def test_document_limit_must_be_a_supported_integer(limit):
+    book = Notebook()
+    with pytest.raises(BenchsideError) as caught:
+        native.run_native(
+            {
+                "action": "native.inspect",
+                "document": book.document,
+                "workspace_id": native.unpack(book.document)[0]["workspace_id"],
+                "document_limit_bytes": limit,
+            }
+        )
+    assert caught.value.code == "native_storage_invalid"
 
 
 def test_submission_with_headroom_still_saves_its_receipt(monkeypatch):
