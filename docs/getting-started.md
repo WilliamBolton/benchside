@@ -15,29 +15,28 @@ for the Git/terminal route. A plugin packages skills and their supporting runtim
 | Clone GitHub and ask an agent to set it up | Install source dependencies and run guided setup. The installed skill remembers the runtime so later chats work outside the checkout. No model-specific backend is needed. |
 | Codex or another local agent | `bench setup --agent codex` or `--agent generic --skills-dir <host directory>` installs the shared seven-role skill. The agent runs setup for the researcher. |
 | Terminal / Claude Code | Shared skill through `bench setup --agent claude` or `bench init`; explicit `bench init --legacy-cli` provides legacy role commands and local session hooks. |
-| OpenAI plugin | `benchside-plugin-0.3.0.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
-| Claude plugin | `benchside-claude-plugin-0.3.0.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
-| Claude standalone skill | `benchside-claude-0.3.0.zip` remains available for custom-skill installation. |
+| OpenAI plugin | `benchside-plugin-0.3.1.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
+| Claude plugin | `benchside-claude-plugin-0.3.1.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
+| Claude standalone skill | `benchside-claude-0.3.1.zip` remains available for custom-skill installation. |
 
-The expanded implementation is in [draft PR #5](https://github.com/science-works/benchside/pull/5).
-Published main does not yet contain these changes. No public plugin listing has been published.
+The expanded implementation is reviewed in [PR #5](https://github.com/science-works/benchside/pull/5).
+No public plugin listing has been published.
 Package validation does not replace installation, discovery and fresh-chat memory
 checks in the intended app/account.
 
 ## Starting with an agent that has no Benchside context
 
-Name-only discovery is not guaranteed. Give the agent an exact source URL. Before
-PR #5 merges, a filesystem/execution-capable agent such as Codex or Claude Code
+Name-only discovery is not guaranteed. Give the agent an exact source URL. For
+setup, a filesystem/execution-capable agent such as Codex or Claude Code
 can follow this prompt:
 
 > Set up Science Works' Benchside from
-> https://github.com/WilliamBolton/benchside/tree/codex/research-roles-rollout.
+> https://github.com/science-works/benchside.
 > Read its README and guided onboarding instructions and perform the setup for
 > this app. Ask where I want private records stored and whether I want optional
 > metascience participation. Verify a save/readback and explain any unsupported
 > steps. I should not need to type terminal commands.
 
-After the reviewed merge, use https://github.com/science-works/benchside instead.
 The source route requires execution and suitable storage tools; reading a GitHub
 page in an ordinary chat does not install a plugin. In Claude, upload the supplied
 Claude plugin ZIP through Customize → Plugins. In OpenAI apps, install the
@@ -94,13 +93,16 @@ For native/connected storage, the private Benchside memory document contains the
 validated records, and each project has a readable journal document. A single
 private memory document can hold several isolated projects.
 
-**Current limitation, 29 October:** the installed 0.3.0 Claude runtime works,
-but the larger cloud-notebook transfer is unresolved and the account's disabled
-network egress blocks direct sending. Small earlier notebook passes do not prove
-reliable growing cloud memory. Prefer a durable local folder through a capable
-desktop agent for the live demo. See the [demo guide](demo-start-here.md) and
-[Claude investigation](claude-cloud-memory-investigation.md). The following
-paragraph records earlier acceptance results, not a guarantee for every host.
+**Claude update, 29 October:** version 0.3.1 transfers native notebooks as files
+and applies Claude Docs' 65,536-character block limit. A 52 KB synthetic cloud
+notebook passed exact transfer, and approved feedback reached Science Works after
+allowlisting `ingest.benchside.science.works`. The blob replacement operation is
+not documented in Anthropic's Docs guide; saves stop safely if it is unavailable.
+Updating the package does not change account network settings. Verify save and
+fresh-chat restoration in the account you intend to use. See the
+[demo guide](demo-start-here.md) and
+[Claude findings](claude-memory-and-sending-findings-2026-10-29.md).
+The following records earlier acceptance results, not a guarantee for every host.
 
 ChatGPT Pages and the connected Google Drive/Docs tools have passed synthetic
 save/read/restore checks. Claude Docs has also passed private-document creation,

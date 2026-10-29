@@ -34,17 +34,18 @@ All seven roles are included:
 
 See [Getting started](docs/getting-started.md) for setup without terminal commands
 or API keys. Installable Claude and ChatGPT/Codex packages are built from this
-repository. The current review package is 0.3.0; the expanded features are still
-unmerged and have no public plugin-directory listing. Give a new agent the
-repository/review-branch URL and [setup instructions](docs/getting-started.md)
+repository. The current package is 0.3.1. There is no public plugin-directory
+listing yet. Give a new agent the repository URL and
+[setup instructions](docs/getting-started.md)
 rather than relying on discovery by name alone.
 
 Native memory uses a private notebook in a capable host, with readable journals
 per project. Guarded saves and readback protect the validated record; the
-execution sandbox is disposable. Earlier small ChatGPT/Claude notebooks passed
-save and fresh-chat restoration tests, but a larger Claude notebook failed exact
-transfer on 29 October. For today's demo prefer a durable local folder through
-Codex or Claude Code. See the [current demo guide](docs/demo-start-here.md),
+execution sandbox is disposable. ChatGPT/Claude notebooks have passed
+save and fresh-chat restoration tests. Version 0.3.1 adds exact file transfer for
+Claude Docs, verified with a 52 KB synthetic cloud notebook, plus Claude's smaller
+block limit and clearer blocked-send guidance. Check the installed version and
+storage tools in the presenting account before a live demo. See the [current demo guide](docs/demo-start-here.md),
 [Claude investigation](docs/claude-cloud-memory-investigation.md), and
 [28 October acceptance history](docs/acceptance-2026-10-28.md) for evidence and
 remaining host limitations. Run the [rollout checks](docs/rollout.md) before
@@ -190,9 +191,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.3.0.zip` (standalone skill),
-`dist/benchside-plugin-0.3.0.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.3.0.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.3.1.zip` (standalone skill),
+`dist/benchside-plugin-0.3.1.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.3.1.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

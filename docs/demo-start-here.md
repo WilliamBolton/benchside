@@ -1,40 +1,33 @@
 # Benchside colleague demo — 29 October 2026
 
-## Install
+## Use ChatGPT web without uploading
 
-For a colleague with a paid Claude account, use the newly rebuilt Claude plugin
-after the compatibility PR is merged. The earlier `benchside-claude-plugin-0.3.0.zip`
-does not contain the new file-transfer instructions or runtime size limit. Rebuild
-with a new patch version and verify that installed version before presenting.
-In Claude: **Customize → Plugins → Upload a
-plugin**, choose the ZIP, then Upload. Open Benchside and choose Try in chat.
-They do not need a terminal or API key. The package is a review build, not yet a
-public directory listing. A normal chat prompt cannot silently install a plugin
-into someone's account; uploading the ZIP is the explicit installation step.
+In Will's ChatGPT account, Benchside is already installed. Use the updated 0.3.1
+plugin in a fresh conversation, select **Work**, and select **Benchside** from the
+plugin picker. The agent runs setup and prepares the submission; the presenter
+only talks to it, chooses private storage and reviews what will be shared.
+There is no ZIP upload or receipt-copying step in this installed-account demo.
 
-For Will's ChatGPT account, Benchside is already installed and the private plugin
-has been updated to 0.3.0. Select Benchside in a new conversation. This private
-plugin URL is not a public installation link for colleagues:
-https://chatgpt.com/plugins/Plugin_a5f12a7a3860819195a9308479e22ad2
+Private plugin: https://chatgpt.com/plugins/Plugin_a5f12a7a3860819195a9308479e22ad2
 
-If using a filesystem-capable agent such as Codex or Claude Code, an alternative
-is to ask it to get the review branch from
-https://github.com/WilliamBolton/benchside/tree/codex/research-roles-rollout
-and follow the README's agent setup. Let it ask where the private records should
-live, outside Git. Do not direct colleagues to main for these unmerged features.
-This source route depends on the host's filesystem and command tools; it is not
-an installation method supported by every browser chat.
+This account-private plugin is not a public installation link for colleagues.
+For a colleague using Codex or Claude Code, ask the agent to set up
+https://github.com/science-works/benchside and follow its README. That route needs
+filesystem and execution tools; reading the repository in an ordinary browser
+chat does not install it. A new Claude account currently installs the supplied
+`benchside-claude-plugin-0.3.1.zip` through Customize → Plugins. Public plugin
+distribution remains separate work.
 
 ## Before presenting
 
-For today's most dependable live walkthrough, use **Codex with a new local demo
-folder outside Git**. Benchside 0.3.0 is already available in Will's Codex account;
-invoke Benchside in a fresh conversation and use the prompts below. Codex handles
-the runtime commands; the presenter does not need to type terminal commands.
-Normal host permissions still apply when writing the chosen folder or sending.
+Check that the selected plugin reports 0.3.1 and that its execution environment
+can reach the Science Works endpoint. Do not send the marked demo problem during
+a readiness check: the waiting GitHub run ends after its first matching batch.
+A local demo folder outside Git in Codex or Claude Code is an alternative if the
+web account lacks suitable execution or durable storage tools.
 
-Use only invented research and a separate demo store. Claude's compatibility PR
-now describes an exact file-transfer route tested with a 52 KB cloud notebook.
+Use only invented research and a separate demo store. The 0.3.1 Claude package
+includes an exact file-transfer route tested with a 52 KB cloud notebook.
 It also enforces Claude Docs' smaller block limit. Use it only after updating
 the installed package, and verify a save and a fresh-chat restore beforehand.
 A local folder in Codex or Claude Code remains an available route using the
@@ -102,7 +95,7 @@ Only this invented problem should go into the demo submission.
 
 Research discussion → private records → reviewed workflow problem → receiving
 API → private Cloudflare bucket → automatic GitHub summary and downloadable report.
-The Vercel view is later work. The updated reporting PR computes summary counts
+The Vercel view is later work. The reporting workflow computes summary counts
 and retains each complete submitted problem separately, without summarising its
 wording or combining matching descriptions. Related problems are not yet grouped
 by an LLM. Optional context is retained privately; public-ready reporting remains
@@ -111,3 +104,15 @@ retains the full wording and context of the demo problem.
 
 [Successful automatic rehearsal](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40877962796)
 provides a fallback example, clearly labelled as an earlier synthetic test.
+
+## Where the result appears
+
+Open **LauraRyanSW/tools-science-works → Actions → Benchside synthetic demo →
+the waiting run → Summary**. The readable job summary shows each complete
+synthetic problem. Under **Artifacts**, `benchside-synthetic-demo` contains
+`synthetic-demo.json` and `synthetic-demo.md`. These are run outputs, not commits.
+
+The watcher recognises only the exact marker at the start of every primary
+problem description. Ordinary submissions stay out; a mixed marked/unmarked batch
+stops for review. Normal research reporting always excludes registered demo
+markers, including submissions arriving after the demo window.
