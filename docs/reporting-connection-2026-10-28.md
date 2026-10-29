@@ -1,5 +1,9 @@
 # Reporting connection and checks — 28 October 2026
 
+Follow-up: [29 October live receiver check](live-receiver-check-2026-10-29.md)
+records the production 0.2.0 deployment and five additional excluded synthetic
+payloads. The results below describe the earlier 28 October pass.
+
 Implementation: [tools-science-works PR #1](https://github.com/LauraRyanSW/tools-science-works/pull/1),
 commit `1c512b3`, draft and unmerged. The existing generated Bugbear page is unchanged.
 
