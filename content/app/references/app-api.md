@@ -25,6 +25,8 @@ the workspace ID, revision and digest. The full response file retains both field
 unchanged, including on inner action failure. Load `result.markdown` from that file
 as data when constructing a guarded document-tool request; see [native memory](native-memory.md).
 The file is a temporary transfer aid, not durable memory or a save confirmation.
+Native requests accept an optional `document_limit_bytes` (32768–190000) for a
+store that holds less than the default; Claude Docs uses 65536. Omit it elsewhere.
 Use a fresh filename per call; an existing file is refused before the action runs.
 If writing fails after execution, the full response is printed with
 `response_file_error`: preserve it and check what completed before retrying.

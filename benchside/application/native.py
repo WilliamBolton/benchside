@@ -252,7 +252,18 @@ def _has_gap_context(value):
     return False
 
 
-def pack(body, workspace_id, revision):
+def _document_limit(request):
+    # A host store may hold less than one Pages edit: Claude Docs caps a code block
+    # at 65,536 characters. Omitted means the original limit for every other host.
+    limit = request.get("document_limit_bytes")
+    if limit is None:
+        return MAX_DOCUMENT_BYTES
+    if type(limit) is not int or not 2 * DOCUMENT_CONTROL_RESERVE <= limit <= MAX_DOCUMENT_BYTES:
+        _fail(f"document_limit_bytes must be an integer from 32768 to {MAX_DOCUMENT_BYTES}")
+    return limit
+
+
+def pack(body, workspace_id, revision, *, limit=MAX_DOCUMENT_BYTES):
     _validate_body(body)
     raw = _json(body).encode("utf-8")
     if len(raw) > MAX_STATE_BYTES:
@@ -266,7 +277,7 @@ def pack(body, workspace_id, revision):
         "payload": base64.b64encode(zlib.compress(raw)).decode("ascii"),
     }
     snapshot["sha256"] = _digest(snapshot)
-    if len(_json(snapshot).encode("utf-8")) > MAX_DOCUMENT_BYTES:
+    if len(_json(snapshot).encode("utf-8")) > limit:
         _capacity_error()
     return snapshot
 
@@ -403,17 +414,18 @@ def _checkpoint_sampling_format(body, original_body):
         body["replay"] = {"generation": 1}
 
 
-def _capacity(body, snapshot):
+def _capacity(body, snapshot, limit=MAX_DOCUMENT_BYTES):
     state_bytes = len(_json(body).encode("utf-8"))
     document_bytes = len(_json(snapshot).encode("utf-8"))
     return {
         "state_bytes": state_bytes,
         "document_bytes": document_bytes,
+        "document_limit_bytes": limit,
         "ordinary_state_bytes_remaining": max(
             0, MAX_STATE_BYTES - STATE_CONTROL_RESERVE - state_bytes
         ),
         "ordinary_document_bytes_remaining": max(
-            0, MAX_DOCUMENT_BYTES - DOCUMENT_CONTROL_RESERVE - document_bytes
+            0, limit - DOCUMENT_CONTROL_RESERVE - document_bytes
         ),
         "control_reserve_document_bytes": DOCUMENT_CONTROL_RESERVE,
         "optional_history_document_bytes": _metascience_size(body),
@@ -440,15 +452,14 @@ def _require_metascience_headroom(body, original=None, *, additional=0):
         )
 
 
-def _require_headroom(body, snapshot, *, additional=0):
-    capacity = _capacity(body, snapshot)
+def _require_headroom(body, snapshot, *, additional=0, limit=MAX_DOCUMENT_BYTES):
+    capacity = _capacity(body, snapshot, limit)
     # Base64 and conservative compression/framing allowance. Collector receipts
     # are bounded separately; reserve their worst-case metadata before any POST.
     encoded_growth = (additional * 4 + 2) // 3 + (1024 if additional else 0)
     if (
         capacity["state_bytes"] + additional > MAX_STATE_BYTES - STATE_CONTROL_RESERVE
-        or capacity["document_bytes"] + encoded_growth
-        > MAX_DOCUMENT_BYTES - DOCUMENT_CONTROL_RESERVE
+        or capacity["document_bytes"] + encoded_growth > limit - DOCUMENT_CONTROL_RESERVE
     ):
         _capacity_error()
 
@@ -606,7 +617,7 @@ def _compact_control_history(body):
     body["files"][name] = "".join(_json(row) + "\n" for row in retained)
 
 
-def _preflight_submission(body, snapshot, command):
+def _preflight_submission(body, snapshot, command, limit=MAX_DOCUMENT_BYTES):
     if command["action"] not in {"sharing.send", "metascience.send"}:
         return
     # Duplicate destination/ID metadata can appear in both the durable receipt
@@ -637,7 +648,9 @@ def _preflight_submission(body, snapshot, command):
             _require_metascience_headroom(
                 body, additional=10 * 1024 + len(metadata.encode("utf-8"))
             )
-    _require_headroom(body, snapshot, additional=18 * 1024 + 2 * len(metadata.encode("utf-8")))
+    _require_headroom(
+        body, snapshot, additional=18 * 1024 + 2 * len(metadata.encode("utf-8")), limit=limit
+    )
 
 
 def _restore(files, home):
@@ -842,6 +855,7 @@ def run_native(request):
         }
     if action not in {"native.inspect", "native.run", "native.batch", "native.confirm"}:
         _fail("Unknown native memory action")
+    limit = _document_limit(request)
     expected = request.get("workspace_id")
     if not isinstance(expected, str) or not HEX.fullmatch(expected):
         _fail("Use the notebook workspace ID returned by native.create")
@@ -859,7 +873,7 @@ def run_native(request):
         return {
             **reference(snapshot),
             "projects": body["projects"],
-            "capacity": _capacity(body, snapshot),
+            "capacity": _capacity(body, snapshot, limit),
             "operation_generation": _generation(body),
         }
 
@@ -909,7 +923,10 @@ def run_native(request):
                     _compact_operations(preflight)
                     _bound_operations(preflight)
                     _preflight_submission(
-                        preflight, pack(preflight, expected, snapshot["revision"]), command
+                        preflight,
+                        pack(preflight, expected, snapshot["revision"], limit=limit),
+                        command,
+                        limit,
                     )
                 result = (
                     _execute_batch(app, body, command["steps"])
@@ -956,16 +973,20 @@ def run_native(request):
             if changed and not withdrawal:
                 _require_metascience_headroom(body, original_body)
             try:
-                candidate = pack(body, expected, snapshot["revision"] + 1) if changed else snapshot
+                candidate = (
+                    pack(body, expected, snapshot["revision"] + 1, limit=limit)
+                    if changed
+                    else snapshot
+                )
             except ValidationError as error:
                 if error.code != "native_capacity" or not outcome["ok"] or not withdrawal:
                     raise
                 _compact_operations(body, all_results=True)
                 _compact_control_history(body)
-                candidate = pack(body, expected, snapshot["revision"] + 1)
+                candidate = pack(body, expected, snapshot["revision"] + 1, limit=limit)
                 control_history_compacted = True
             if changed and not withdrawal:
-                _require_headroom(body, candidate)
+                _require_headroom(body, candidate, limit=limit)
         except ValidationError as error:
             if error.code != "native_capacity":
                 raise
@@ -1023,5 +1044,5 @@ def run_native(request):
         "changed": changed,
         "saved": False,
         "project_journal": view,
-        "capacity": _capacity(body, candidate),
+        "capacity": _capacity(body, candidate, limit),
     }

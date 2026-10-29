@@ -41,6 +41,17 @@ class HttpExportSink:
         self.destination = destination
         self._opener = opener or build_opener(_NoRedirect())
 
+    def _network_denied(self, outcome: str, what: str) -> str:
+        # Host-neutral: an app sandbox with network access off, or an institutional
+        # proxy. Host-specific steps belong in that host's instructions.
+        host = urlsplit(self.destination).hostname
+        return (
+            f"{outcome}: a network proxy {what} {host} before it reached Science Works. "
+            "The reviewed submission is still pending. Once network access to "
+            f"{host} is allowed in the app or network settings, retry the same reviewed "
+            "submission. Do not change settings for the researcher."
+        )
+
     def send(self, payload: str) -> DeliveryReceipt:
         body = payload.encode("utf-8")
         if len(body) > MAX_BYTES:
@@ -86,11 +97,26 @@ class HttpExportSink:
                 if err.code == 429
                 else ("submission_unavailable" if err.code >= 500 else "submission_rejected")
             )
-            raise InfrastructureError(
-                f"Collector returned HTTP {err.code}; nothing was marked as shared. Retry the same reviewed submission.",
-                code=code,
-            ) from err
+            # An HTTP response can arrive after the destination received the POST.
+            # Only a refused CONNECT tunnel below proves the payload was not sent.
+            message = f"Collector returned HTTP {err.code}; nothing was marked as shared. Retry the same reviewed submission."
+            if err.code == 403:
+                host = urlsplit(self.destination).hostname
+                message = (
+                    "HTTP 403: no valid collector receipt was received; nothing was marked "
+                    "as shared. The reviewed submission is still pending. A proxy or server "
+                    f"policy may be refusing access to {host}. Check the app or network "
+                    "settings before retrying the same reviewed submission. Do not change "
+                    "settings for the researcher."
+                )
+            raise InfrastructureError(message, code=code) from err
         except (URLError, TimeoutError, OSError) as err:
+            # Host egress proxies refuse the HTTPS tunnel before any payload is sent.
+            if str(getattr(err, "reason", err)).startswith("Tunnel connection failed: 403"):
+                raise InfrastructureError(
+                    self._network_denied("Nothing was sent", "blocked the connection to"),
+                    code="submission_unavailable",
+                ) from err
             raise InfrastructureError(
                 "Collector could not be reached; retry the same reviewed submission.",
                 code="submission_unavailable",

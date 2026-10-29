@@ -79,6 +79,16 @@ automatically. Older submissions and gaps without context keep their format.
   `approved_sha256`. Do not replace the payload, infer approval, or send subsequent
   batches that were not reviewed. A rejected or uncertain submission stays pending.
   Retry the same draft after a network failure; do not regenerate it to retry.
+- If `sharing.send` specifically says a proxy blocked the HTTPS tunnel, nothing
+  was sent and the draft stays pending. An ordinary HTTP 403 response proves only
+  that no valid receipt was received, not that the destination saw no data.
+  In Claude chat (web, desktop), a tunnel refusal usually means code
+  network access is off. The researcher can open Settings → Capabilities, switch on
+  Allow network egress, keep "Package managers only", and add
+  `ingest.benchside.science.works` under Additional allowed domains (verified on
+  an individual plan). Team/Enterprise owners control this for everyone. In
+  Claude Code, approve the domain when asked. Elsewhere it is usually an
+  institutional firewall. Never change settings yourself.
 - `sharing.history` returns receipts. Give the researcher the channel, digest and
   received date for an operator-assisted removal request. New contributions can additionally
   be located with their random contributor ID. Do not send a removal request yourself
