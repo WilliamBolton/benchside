@@ -34,12 +34,15 @@ guide. If it ever stops working, the save is refused and nothing is lost.
 
 ## 2. Sending reports
 
-- claude.ai has no "approve this one connection" option. Code network access is
-  one switch: Settings → Capabilities → **Allow network egress**. It is off on
-  this account (Max plan).
-- While it is off, the page shows only the on/off switch, so a single-domain
-  option could not be checked. Anthropic only documents a domain allowlist for
-  Team/Enterprise owners.
+- claude.ai has no "approve this one connection" option. In claude.ai, Claude's
+  commands run on Anthropic's cloud computer, which can only reach outside sites
+  that are allowed in Settings → Capabilities → **Allow network egress**.
+- Turning it on (Max plan) reveals a domain allowlist. With "Package managers
+  only" plus `ingest.benchside.science.works` under Additional allowed domains,
+  a new claude.ai chat reached Science Works: GET 200, then an approved synthetic
+  feedback report was accepted (receipt 17:03:29 UTC, fingerprint `f2953dbf…`
+  matching the approved one). It used the feedback channel, not the demo marker.
+  The setting was left on with only that domain added.
 - Claude Code can reach Science Works directly (read-only check: 200 OK).
 - When the network is blocked, Benchside already kept the report unsent and
   pending. Its message said "retry", which does not help.
