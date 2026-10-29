@@ -152,3 +152,76 @@ class TestHooks:
         assert code == 0
         code, _ = run("hook", "session-end", stdin="")
         assert code == 0
+
+
+class TestRealSessionFlow:
+    """The production path: CLAUDE_SESSION_ID is NOT in the Bash env (Claude
+    Code does not export it). The SessionStart hook registers the id; bench
+    stamps journal entries and names pointers from it; SessionEnd retires
+    the pointer under the real id."""
+
+    def test_stamping_and_retirement_without_env_var(self, env, monkeypatch, tmp_path):
+        import json
+
+        run, home, project_dir = env
+        monkeypatch.delenv("CLAUDE_SESSION_ID", raising=False)
+        run("init", "--yes")
+
+        stdin = json.dumps(
+            {"session_id": "real-uuid-1", "cwd": str(project_dir), "source": "startup"}
+        )
+        assert run("hook", "session-start", stdin=stdin)[0] == 0
+
+        run("sitting", "open", "--persona", "pi")
+        run("hypothesis", "stamped hypothesis")
+
+        # pointer is named by the REAL session id, not 'local'
+        assert (home / "sessions" / "real-uuid-1.json").is_file()
+
+        # journal envelope carries the conversation id
+        journal = home / "projects" / "chd7-study" / "journal.jsonl"
+        lines = [json.loads(l) for l in journal.read_text().splitlines()]
+        assert all(line["session"] == "real-uuid-1" for line in lines)
+
+        # SessionEnd retires the pointer under that id
+        transcript = tmp_path / "t.jsonl"
+        transcript.write_text("{}\n")
+        stdin = json.dumps(
+            {
+                "session_id": "real-uuid-1",
+                "cwd": str(project_dir),
+                "transcript_path": str(transcript),
+                "session_end_reason": "clear",
+            }
+        )
+        assert run("hook", "session-end", stdin=stdin)[0] == 0
+        assert not (home / "sessions" / "real-uuid-1.json").exists()
+        assert (home / "sessions" / "real-uuid-1.ended").exists()
+
+
+class TestSafeDuplicateOpen:
+    def test_duplicate_open_preserves_sitting_without_session_environment(self, env, monkeypatch):
+        run, home, project_dir = env
+        for variable in ("CLAUDE_SESSION_ID", "BENCHSIDE_SESSION_ID", "CLAUDE_ENV_FILE"):
+            monkeypatch.delenv(variable, raising=False)
+        assert run("init", "--yes")[0] == 0
+        payload = json.dumps(
+            {"session_id": "registered-session", "cwd": str(project_dir), "source": "startup"}
+        )
+        assert run("hook", "session-start", stdin=payload)[0] == 0
+        assert run("sitting", "open", "--persona", "pi")[0] == 0
+        pointer = home / "sessions" / "registered-session.json"
+        original_pointer = pointer.read_text()
+        journal = home / "projects" / "chd7-study" / "journal.jsonl"
+        original_journal = journal.read_text()
+
+        code, output = run("sitting", "open", "--persona", "pi")
+
+        assert code == 1
+        assert "already open" in output
+        assert pointer.read_text() == original_pointer
+        assert journal.read_text() == original_journal
+        assert run("hypothesis", "Continue the existing sitting")[0] == 0
+        recorded = json.loads(journal.read_text().splitlines()[-1])
+        assert recorded["data"]["consultation_id"] == json.loads(original_pointer)["sitting_id"]
+        assert recorded["session"] == "registered-session"

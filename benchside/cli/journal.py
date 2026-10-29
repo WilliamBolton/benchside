@@ -172,14 +172,15 @@ def _gaps(ui: UI, journal, project_id) -> None:
 
 def _events(journal, project_id, *, as_json: bool) -> None:
     """The raw stream: data, so stdout — pipeable either way."""
+    if as_json:
+        for envelope in journal.read_envelopes(project_id):
+            print(json.dumps(envelope, ensure_ascii=False))
+        return
     for event in journal.read(project_id):
-        if as_json:
-            print(json.dumps({"type": type(event).__name__, "data": event.model_dump(mode="json")}))
-        else:
-            data = event.model_dump(mode="json")
-            keys = [k for k in ("statement", "detail", "decision", "resolution") if data.get(k)]
-            extra = f" | {data[keys[0]][:60]}" if keys else ""
-            print(f"{data['recorded_at'][:19]} {type(event).__name__}{extra}")
+        data = event.model_dump(mode="json")
+        keys = [k for k in ("statement", "detail", "decision", "resolution") if data.get(k)]
+        extra = f" | {data[keys[0]][:60]}" if keys else ""
+        print(f"{data['recorded_at'][:19]} {type(event).__name__}{extra}")
 
 
 def _target_line(target) -> str:
