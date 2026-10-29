@@ -34,14 +34,20 @@ All seven roles are included:
 
 See [Getting started](docs/getting-started.md) for setup without terminal commands
 or API keys. Installable Claude and ChatGPT/Codex packages are built from this
-repository. Native memory uses a private notebook in ChatGPT Space (or compatible
-Claude Docs), with readable journals per project. Guarded saves and readback
-protect the validated record; the execution sandbox is disposable. Both installed
-plugins passed synthetic native saves and fresh-chat restoration on 23 October.
-The 0.1.4 update passed native saves in both installed apps on 28 October and
-Claude continued the existing shared Google notebook with a guarded update.
-See the [28 October acceptance report](docs/acceptance-2026-10-28.md) for current
-results and host limitations, and the [rollout checks](docs/rollout.md) before
+repository. The current review package is 0.3.0; the expanded features are still
+unmerged and have no public plugin-directory listing. Give a new agent the
+repository/review-branch URL and [setup instructions](docs/getting-started.md)
+rather than relying on discovery by name alone.
+
+Native memory uses a private notebook in a capable host, with readable journals
+per project. Guarded saves and readback protect the validated record; the
+execution sandbox is disposable. Earlier small ChatGPT/Claude notebooks passed
+save and fresh-chat restoration tests, but a larger Claude notebook failed exact
+transfer on 29 October. For today's demo prefer a durable local folder through
+Codex or Claude Code. See the [current demo guide](docs/demo-start-here.md),
+[Claude investigation](docs/claude-cloud-memory-investigation.md), and
+[28 October acceptance history](docs/acceptance-2026-10-28.md) for evidence and
+remaining host limitations. Run the [rollout checks](docs/rollout.md) before
 inviting researchers through a particular app route.
 
 A research sitting can continue across conversations. New roles save an
@@ -88,9 +94,11 @@ submission needs an exact preview and approval.
 The Science Works endpoint is included in the product; researchers configure no
 credentials. All five collection routes from the companion
 `science-works/benchside-ingest` repository were deployed and verified with
-synthetic records on 28 October. The new v2 linked formats in this review branch
-need the matching receiver update before release; they are not deployed yet. App network access and research release checks
-still apply; deployment does not authorise collection from researchers.
+synthetic records on 28 October. The matching linked formats and optional-context
+v3 format were deployed and verified by 29 October. App network access and
+research release checks still apply; deployment does not authorise collection
+from researchers. Claude's current account network setting still blocks its
+cloud execution from contacting the receiver until access is explicitly enabled.
 
 ## Optional studies and wider observation
 
@@ -123,6 +131,10 @@ from source, and run the same JSON interface used by the plugins. Setup asks for
 a local directory, private native documents, or a compatible installed connector.
 Claude and Codex can continue the same project in a shared accessible store.
 The expanded review build has not yet been published to the default Git branch.
+Before merge, use the
+[review branch](https://github.com/WilliamBolton/benchside/tree/codex/research-roles-rollout)
+and its guided setup. The default-branch install below becomes the route for
+these expanded features after the reviewed merge.
 
 ```bash
 uv tool install git+https://github.com/science-works/benchside

@@ -15,14 +15,41 @@ for the Git/terminal route. A plugin packages skills and their supporting runtim
 | Clone GitHub and ask an agent to set it up | Install source dependencies and run guided setup. The installed skill remembers the runtime so later chats work outside the checkout. No model-specific backend is needed. |
 | Codex or another local agent | `bench setup --agent codex` or `--agent generic --skills-dir <host directory>` installs the shared seven-role skill. The agent runs setup for the researcher. |
 | Terminal / Claude Code | Shared skill through `bench setup --agent claude` or `bench init`; explicit `bench init --legacy-cli` provides legacy role commands and local session hooks. |
-| OpenAI plugin | `benchside-plugin-0.1.5.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
-| Claude plugin | `benchside-claude-plugin-0.1.5.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
-| Claude standalone skill | `benchside-claude-0.1.5.zip` remains available for custom-skill installation. |
+| OpenAI plugin | `benchside-plugin-0.3.0.zip` includes the portable manifest, Codex compatibility manifest, setup entry and bundled skill/runtime. |
+| Claude plugin | `benchside-claude-plugin-0.3.0.zip` includes `.claude-plugin/plugin.json`, the shared skill, role references and runtime. The manifest passes Claude's validator. |
+| Claude standalone skill | `benchside-claude-0.3.0.zip` remains available for custom-skill installation. |
 
 The expanded implementation is in [draft PR #5](https://github.com/science-works/benchside/pull/5).
 Published main does not yet contain these changes. No public plugin listing has been published.
 Package validation does not replace installation, discovery and fresh-chat memory
 checks in the intended app/account.
+
+## Starting with an agent that has no Benchside context
+
+Name-only discovery is not guaranteed. Give the agent an exact source URL. Before
+PR #5 merges, a filesystem/execution-capable agent such as Codex or Claude Code
+can follow this prompt:
+
+> Set up Science Works' Benchside from
+> https://github.com/WilliamBolton/benchside/tree/codex/research-roles-rollout.
+> Read its README and guided onboarding instructions and perform the setup for
+> this app. Ask where I want private records stored and whether I want optional
+> metascience participation. Verify a save/readback and explain any unsupported
+> steps. I should not need to type terminal commands.
+
+After the reviewed merge, use https://github.com/science-works/benchside instead.
+The source route requires execution and suitable storage tools; reading a GitHub
+page in an ordinary chat does not install a plugin. In Claude, upload the supplied
+Claude plugin ZIP through Customize → Plugins. In OpenAI apps, install the
+available Benchside plugin/package through the host's supported flow. The current
+account-private OpenAI listing is not a public installation link for colleagues.
+Public directory publication is separate from merging the repository.
+
+Once installed, test recognition in a fresh conversation. If the host does not
+discover installed skills automatically, explicitly select Benchside or reference
+the installed skill. Do not claim fresh-chat discovery until tested.
+
+## First research project
 
 Install the Benchside package supplied for your app, then say:
 
@@ -66,6 +93,14 @@ For local storage, events are in `<chosen folder>/projects/<project ID>/journal.
 For native/connected storage, the private Benchside memory document contains the
 validated records, and each project has a readable journal document. A single
 private memory document can hold several isolated projects.
+
+**Current limitation, 29 October:** the installed 0.3.0 Claude runtime works,
+but the larger cloud-notebook transfer is unresolved and the account's disabled
+network egress blocks direct sending. Small earlier notebook passes do not prove
+reliable growing cloud memory. Prefer a durable local folder through a capable
+desktop agent for the live demo. See the [demo guide](demo-start-here.md) and
+[Claude investigation](claude-cloud-memory-investigation.md). The following
+paragraph records earlier acceptance results, not a guarantee for every host.
 
 ChatGPT Pages and the connected Google Drive/Docs tools have passed synthetic
 save/read/restore checks. Claude Docs has also passed private-document creation,
@@ -152,9 +187,12 @@ and usage counts with Science Works. The assistant shows the proposed content
 and recipient before sending it, and you can edit or exclude items. Scientific
 notes and source documents stay in your project record.
 
-Usage reporting uses a random installation ID to estimate returning use. That
-ID is absent from workflow observations and feedback. You can stop any reporting
-choice at any time and ask to see previous submission receipts.
+New contributions use a random pseudonymous store ID across sharing channels,
+including workflow observations, feedback and usage, after consent to linked
+sharing. Existing unlinked participants must accept this change first; historical
+unlinked records remain unlinked. It describes a participating store, not an exact
+person. You can stop any reporting choice at any time and ask to see previous
+submission receipts.
 
 Setup also offers optional broad discipline and career-stage categories. Skip
 either, keep them private, or separately choose to include them in reviewed usage
