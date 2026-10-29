@@ -116,15 +116,16 @@ def _git_remote_slug(cwd: Path) -> str | None:
 def session_name(paths: Paths | None = None, project_id: ProjectId | None = None) -> str:
     """The session this bench invocation belongs to. Env wins; else the id
     the SessionStart hook registered for this project; else 'local'."""
-    env = os.environ.get("CLAUDE_SESSION_ID")
-    if env:
-        return env
     if paths is not None and project_id is not None:
         from benchside.infrastructure.session_context import current_session
 
         registered = current_session(paths, project_id)
-        if registered:
-            return registered
+        return registered or "local"
+    env = os.environ.get("BENCHSIDE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
+    if env:
+        from benchside.infrastructure.session_context import validate_session_id
+
+        return validate_session_id(env)
     return "local"
 
 
@@ -136,28 +137,34 @@ def write_pointer(paths: Paths, *, sitting_id: str, project_id: ProjectId, perso
     directory = pointer_dir(paths)
     directory.mkdir(parents=True, exist_ok=True)
     session = session_name(paths, project_id)
-    (directory / f"{session}.json").write_text(
-        json.dumps(
+    from benchside.infrastructure.files import atomic_json, file_lock
+
+    with file_lock(directory / f"{session}.lock"):
+        atomic_json(
+            directory / f"{session}.json",
             {
                 "sitting_id": sitting_id,
                 "project_id": project_id.root,
                 "persona_id": persona_id,
                 "session": session,
                 "opened_at": datetime.now(UTC).isoformat(),
-            }
-        ),
-        encoding="utf-8",
-    )
+            },
+        )
 
 
 def clear_pointer(paths: Paths, sitting_id: str) -> None:
     """Remove whichever live pointer references the sitting — not blindly this
     session's, so cross-project cleanup via BENCH_SITTING clears the right one."""
+    from benchside.infrastructure.files import file_lock
+
     directory = pointer_dir(paths)
-    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+    for path in sorted(directory.iterdir()) if directory.is_dir() else []:
+        if path.suffix not in {".json", ".ended"}:
+            continue
         try:
-            if json.loads(path.read_text(encoding="utf-8")).get("sitting_id") == sitting_id:
-                path.unlink(missing_ok=True)
+            with file_lock(path.with_suffix(".lock")):
+                if json.loads(path.read_text(encoding="utf-8")).get("sitting_id") == sitting_id:
+                    path.unlink(missing_ok=True)
         except (OSError, json.JSONDecodeError):
             continue
 
@@ -180,24 +187,24 @@ def read_pointer(paths: Paths, project_id: ProjectId | None = None) -> dict | No
     never be adopted (regression: /pi opened in the wrong directory bled into
     the next project's session). Order: BENCH_SITTING env override (explicit,
     allowed cross-project so stranded sittings can be cleaned up), then this
-    session's pointer, then a single unambiguous live pointer — the latter two
-    only when they match the current project.
+    session's pointer (including the local terminal pointer), only when it
+    matches the current project. A missing ID never adopts another conversation.
     """
     override = os.environ.get("BENCH_SITTING")
-    records = live_pointers(paths)
     if override:
-        for record in records:
+        for record in live_pointers(paths):
             if record.get("sitting_id") == override:
                 return record
         return {"sitting_id": override, "project_id": None}
+    # Expired fallback registrations do not retire explicit conversation pointers.
+    # Those pointers must not be adopted merely because only one remains.
+    mine = session_name(paths, project_id)
+    records = live_pointers(paths)
     if project_id is not None:
         records = [r for r in records if r.get("project_id") == project_id.root]
-    mine = session_name(paths, project_id)
     for record in records:
         if record.get("session") == mine:
             return record
-    if len(records) == 1:
-        return records[0]
     return None
 
 

@@ -83,6 +83,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.set_defaults(run=cmd_recall)
 
+    p = sub.add_parser("session", help="recover a conversation that ended without cleanup")
+    session = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    a = session.add_parser("clear", help="retire one ended conversation, keeping its research")
+    a.add_argument("--project", default=None)
+    a.add_argument("--session", required=True, dest="session_id")
+    a.set_defaults(run=cmd_clear_session)
+
     # --- sitting management ---
     p = sub.add_parser("sitting", help="manage the current sitting: open, status, close")
     sitting = p.add_subparsers(dest="action", required=True, metavar="<action>")
@@ -212,6 +219,20 @@ def cmd_project(args) -> int:
     return 0
 
 
+def cmd_clear_session(args) -> int:
+    from benchside.infrastructure.session_context import clear_session
+
+    if not args.project:
+        runtime.require_initialized()
+    project_id = runtime.resolve_project(args.project)
+    clear_session(runtime.current_paths(), project_id, args.session_id)
+    args.ui.info(
+        f"Cleared conversation '{args.session_id}' for project '{project_id.root}'; "
+        "research records and unfinished sittings are preserved."
+    )
+    return 0
+
+
 def cmd_open(args) -> int:
     from benchside.domain.authoring.service.authoring import AuthoringService
     from benchside.domain.consultation.service.consultation import ConsultationService
@@ -221,7 +242,7 @@ def cmd_open(args) -> int:
     project_id = runtime.resolve_project(args.project)
     for record in runtime.live_pointers(paths):
         if (
-            record.get("session") == runtime.session_name()
+            record.get("session") == runtime.session_name(paths, project_id)
             and record.get("project_id") == project_id.root
         ):
             raise BenchsideError(
