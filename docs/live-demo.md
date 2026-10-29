@@ -60,12 +60,27 @@ The intended full demonstration is:
 Research conversation → private saved record → reviewed problem report → HTTPS
 receiver → private R2 object → analysis → reviewed report → Vercel preview.
 
-The receiver, R2 readback and local importer have passed synthetic checks. The
-GitHub-hosted import is still unmerged and intentionally limited to the default
-branch. Bugbear has no Benchside report view yet. Therefore the final displayed
-Vercel step is **not ready**, and should not be presented as already connected.
-Keep the user's no-merge instruction in force. A later display implementation
-can first be demonstrated on a Vercel preview branch without changing production.
+The receiver, R2 readback and local importer have passed synthetic checks. A
+separate **GitHub-hosted synthetic demo job now also passes**, without merging:
+[verified rehearsal run](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40872156541).
+It verified one existing synthetic object, showing one problem, one contributing
+store and one exact-description group. The hosted run took 26 seconds. This is
+the earlier acceptance record, not a record from the presenter's later live chat.
+
+For today's demo, the destination can be that GitHub run-summary page and its
+downloadable JSON/Markdown report. After the new chat's approved send, give the
+operator/agent its receiver receipt. They register the new hash/date and push the
+explicit demo manifest update; the new GitHub run reads that exact record from R2.
+The presenter does not need a terminal. The operator step is real and manual;
+do not describe this as unattended production ingestion.
+
+The main production import remains unmerged and default-branch-only. The separate
+demo job is restricted to the private reporting repository's named branch and
+explicit test receipts; it has no schedule, no GitHub write permission, no bucket
+listing and no R2 write/delete operations. See the
+[operator instructions](https://github.com/LauraRyanSW/tools-science-works/blob/codex/benchside-reporting/reporting/README.md#synthetic-demo-before-merge).
+Bugbear has no Benchside report view yet, so the final Vercel display step is
+**not ready**. It is unnecessary for today's GitHub demonstration. No PR is merged.
 
 Before a real demo send, the operator must arrange receipt registration and
 test exclusion. Schedules currently remain off. Record every returned payload
@@ -73,7 +88,7 @@ hash in the test-object manifest before any research import; the existing code
 does not automatically exclude arbitrary future records just because their text
 says “demo”. Keep a separate, clearly labelled synthetic report for the showcase.
 Never disable test exclusion in the real research report to make a demo count rise.
-If this handling is not ready, stop at the approved preview and use the earlier
+If an operator is unavailable to perform this handling, stop at the approved preview and use the earlier
 receipt-matched fixtures to explain the receiving/reporting components.
 
 ## Reporting structure for the first rollout

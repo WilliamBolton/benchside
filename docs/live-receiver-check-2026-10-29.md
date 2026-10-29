@@ -58,6 +58,17 @@ Evidence: `/private/tmp/benchside-reporting-live-20261029/result.json` and
 connection, not a completed GitHub-hosted workflow run. That workflow deliberately
 requires reviewed default-branch code and remains unmerged.
 
+Later on 29 October, the user requested a demo that reaches GitHub before merging.
+A separate synthetic-only branch job was added in reporting commit `22c42c5`.
+[Its hosted run](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40872156541)
+passed in 26 seconds, including 29 reporting tests, one exact receipt-matched R2
+read and creation of the private `benchside-synthetic-demo` artifact and job summary.
+The downloaded artifact contains one synthetic gap, one store and one group,
+matching the registered 29 October acceptance receipt. This does not claim to be
+the presenter's future live submission or a run of the main production importer.
+The original production/default-branch guard and test exclusions remain intact.
+This additional demo path has no merge, schedule, R2 mutation or Vercel publication.
+
 ## Installed app checks and cloud-memory limitation
 
 Claude's installed plugin and bundled runtime both reported 0.2.0. However,
