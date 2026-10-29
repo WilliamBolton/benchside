@@ -89,6 +89,9 @@ choice must not affect scientific assistance.
 Read [the sharing guide](references/sharing.md) before changing consent or sending.
 Model-derived gaps must exclude private scientific findings and research-specific
 details; public tool/dataset names and versions can remain. Share only the general workflow information allowed by
+the sharing guide's optional context fields. Capture versions, workarounds and
+impact from what the researcher already says; at most one useful follow-up at a
+natural pause, with no requirement to fill missing fields. Follow
 the sharing guides. Recording local observations is not permission to send them. Review each exact
 prepared payload with the researcher, allow edits/exclusions, then send only the
 approved draft and digest. Never approve a draft on the researcher's behalf.

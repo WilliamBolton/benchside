@@ -29,7 +29,7 @@ def summarise(files):
             text = Path(path).read_text(encoding="utf-8")
             data = json.loads(text)
             schema = data.get("schema")
-            if schema in {"benchside.gaps.v1", "benchside.gaps.v2"}:
+            if schema in {"benchside.gaps.v1", "benchside.gaps.v2", "benchside.gaps.v3"}:
                 for item in validate_payload(text)["observations"]:
                     previous = gaps.get(item["id"])
                     if previous is not None and previous != item:

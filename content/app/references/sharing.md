@@ -43,6 +43,23 @@ stops future submissions; it does not delete previously received data.
 
 ## Calls
 
+Workflow gaps can include an optional `context` object. Supported text fields are
+`tool_name`, `tool_version`, `dataset_name`, `dataset_version`, `workflow_area`,
+`frequency`, `impact`, `workaround` and `desired_improvement` (each at most 2000
+characters). Use only the relevant fields; omit unknown values and the entire
+object when there is nothing to add. The existing kind-specific fields remain.
+Record the version actually used, never guess it or substitute the newest release.
+Use public tool/dataset names only; private dataset identifiers and scientific
+details stay private. Context is included in the same reviewed payload and
+subject to the same redaction and approval checks.
+
+Capture useful context already given in the conversation. At a natural pause,
+ask at most one short follow-up if it would materially clarify the problem, such
+as what workaround they use. Do not ask a checklist, repeatedly fill missing
+fields, or interrupt the research to complete a report. Missing context is fine.
+Context-bearing submissions use `benchside.gaps.v3`; the adapter chooses this
+automatically. Older submissions and gaps without context keep their format.
+
 - `sharing.status` returns current choices.
 - `sharing.consent` takes `channel` (`gaps`, `feedback`, `usage`) and boolean
   `enabled`. For gaps also supply `kinds`, selected from the five supported kinds.

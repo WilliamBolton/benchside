@@ -153,9 +153,12 @@ class ExportService(Service):
         )
 
     def _payload(self, observations: list[dict]) -> str:
+        schema = "benchside.gaps.v2" if self.contributor_id else "benchside.gaps.v1"
+        if any("context" in item["gap"] for item in observations):
+            schema = "benchside.gaps.v3"
         return json.dumps(
             {
-                "schema": "benchside.gaps.v2" if self.contributor_id else "benchside.gaps.v1",
+                "schema": schema,
                 **({"contributor_id": self.contributor_id} if self.contributor_id else {}),
                 "observations": observations,
             },

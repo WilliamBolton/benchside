@@ -70,7 +70,7 @@ feedback and weekly usage reporting. All are off until consented, and every
 submission needs an exact preview and approval.
 
 - Workflow observations capture general research-workflow friction and problems
-  for metascience research, using the five existing problem types in a `benchside.gaps.v2` envelope. They
+  for metascience research, using the five existing problem types in a `benchside.gaps.v2` envelope (v3 when optional public tool/dataset context is included). They
   exclude project and session IDs; a random contributor ID supports grouping. Free text is scrubbed
   and reviewed because a schema cannot guarantee anonymity.
 - Feedback contains an ease-of-use rating, repeat-use intent and optional comment.
@@ -178,9 +178,9 @@ uv run --with pip python scripts/build_release.py
 
 Personas are YAML records; edit their sources and run `bench compile`. The app
 package uses the same records, core wheel and pinned dependency lock. Build
-outputs are `dist/benchside-claude-0.2.0.zip` (standalone skill),
-`dist/benchside-plugin-0.2.0.zip` (OpenAI/portable plugin), and
-`dist/benchside-claude-plugin-0.2.0.zip` (Claude plugin upload). All use the same
+outputs are `dist/benchside-claude-0.3.0.zip` (standalone skill),
+`dist/benchside-plugin-0.3.0.zip` (OpenAI/portable plugin), and
+`dist/benchside-claude-plugin-0.3.0.zip` (Claude plugin upload). All use the same
 core and central submission endpoints. The build downloads hash-locked wheels
 for CPython 3.11–3.14 on macOS (Intel/Apple Silicon) and glibc Linux (x86-64/ARM64).
 Installed app packages bootstrap offline; they do not need access to PyPI.

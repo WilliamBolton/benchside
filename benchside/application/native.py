@@ -28,6 +28,7 @@ from benchside.infrastructure.session_context import validate_session_id
 
 SCHEMA = "benchside.native.v1"
 CHECKPOINT_SCHEMA = "benchside.native.v2"
+CONTEXT_SCHEMA = "benchside.native.v3"
 MAX_DOCUMENT_BYTES = 190_000  # Fits one native Pages edit with room for transport metadata.
 MAX_METASCIENCE_DOCUMENT_BYTES = 48 * 1024
 MAX_STATE_BYTES = 8 * 1024 * 1024
@@ -228,13 +229,38 @@ def _validate_project(project):
         _fail("Invalid native project document ID or title")
 
 
+def _has_gap_context(value):
+    """Include JSONL journals, frozen draft JSON and operation results in the gate.
+
+    Older packages must refuse a context-bearing notebook instead of silently
+    discarding nested fields when replaying their older event models.
+    """
+    if isinstance(value, dict):
+        if value.get("schema") == "benchside.gaps.v3" or ("kind" in value and "context" in value):
+            return True
+        return any(_has_gap_context(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_gap_context(item) for item in value)
+    if isinstance(value, str) and ("context" in value or "benchside.gaps.v3" in value):
+        for line in [value, *value.splitlines()]:
+            try:
+                decoded = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(decoded, str) and _has_gap_context(decoded):
+                return True
+    return False
+
+
 def pack(body, workspace_id, revision):
     _validate_body(body)
     raw = _json(body).encode("utf-8")
     if len(raw) > MAX_STATE_BYTES:
         _capacity_error()
     snapshot = {
-        "schema": CHECKPOINT_SCHEMA if "replay" in body else SCHEMA,
+        "schema": CONTEXT_SCHEMA
+        if _has_gap_context(body)
+        else (CHECKPOINT_SCHEMA if "replay" in body else SCHEMA),
         "workspace_id": workspace_id,
         "revision": revision,
         "payload": base64.b64encode(zlib.compress(raw)).decode("ascii"),
@@ -270,7 +296,7 @@ def unpack(document, expected_workspace_id=None):
             "sha256",
         }:
             _fail("Invalid native memory envelope")
-        if snapshot["schema"] not in {SCHEMA, CHECKPOINT_SCHEMA}:
+        if snapshot["schema"] not in {SCHEMA, CHECKPOINT_SCHEMA, CONTEXT_SCHEMA}:
             _update_required()
         if (
             not HEX.fullmatch(snapshot["workspace_id"])
@@ -293,7 +319,10 @@ def unpack(document, expected_workspace_id=None):
             _fail("Invalid or oversized compressed native memory")
         body = _loads(raw.decode("utf-8"))
         _validate_body(body)
-        if (snapshot["schema"] == CHECKPOINT_SCHEMA) != ("replay" in body):
+        contextual = _has_gap_context(body)
+        if (snapshot["schema"] == CONTEXT_SCHEMA) != contextual:
+            _fail("Native workflow context does not match its snapshot schema")
+        if not contextual and (snapshot["schema"] == CHECKPOINT_SCHEMA) != ("replay" in body):
             _fail("Native replay generation does not match its snapshot schema")
         return snapshot, body
     except (ValueError, KeyError, TypeError, AttributeError, zlib.error) as error:
