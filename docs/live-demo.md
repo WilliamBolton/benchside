@@ -47,8 +47,8 @@ These are presenter cues, not instructions to run all steps automatically.
    research questions, and retain an explicit “SYNTHETIC DEMO — not a research
    submission” marker in allowed descriptive text.
 7. Inspect the exact preview. Only then approve the synthetic submission if the
-   operator has prepared the test handling below. Show the receiver receipt and
-   corresponding private R2 object; a successful chat response alone is not proof.
+   registered marker below is present. Show the receiver receipt and
+   automatic GitHub report; a successful chat response alone is not proof.
 
 Do not pre-authorize an unseen payload, invent a submission receipt, or set a
 new `test:true` field: the live receiver enforces a strict schema.
@@ -67,29 +67,40 @@ It verified one existing synthetic object, showing one problem, one contributing
 store and one exact-description group. The hosted run took 26 seconds. This is
 the earlier acceptance record, not a record from the presenter's later live chat.
 
-For today's demo, the destination can be that GitHub run-summary page and its
-downloadable JSON/Markdown report. After the new chat's approved send, give the
-operator/agent its receiver receipt. They register the new hash/date and push the
-explicit demo manifest update; the new GitHub run reads that exact record from R2.
-The presenter does not need a terminal. The operator step is real and manual;
-do not describe this as unattended production ingestion.
+Today's automatic route has now passed a live rehearsal:
+[automatic 0.3.0 run](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40877962796).
+The receiver accepted the new synthetic record at 13:04:14 UTC; GitHub completed
+its report at 13:04:29 UTC. No receipt was copied to the reporting job. The report
+retained optional tool version, impact and workaround fields, while the private
+scientific decision remained absent. The artifact contains one observation,
+one synthetic contributing store and one exact-description group.
 
-The main production import remains unmerged and default-branch-only. The separate
-demo job is restricted to the private reporting repository's named branch and
-explicit test receipts; it has no schedule, no GitHub write permission, no bucket
-listing and no R2 write/delete operations. See the
-[operator instructions](https://github.com/LauraRyanSW/tools-science-works/blob/codex/benchside-reporting/reporting/README.md#synthetic-demo-before-merge).
-Bugbear has no Benchside report view yet, so the final Vercel display step is
-**not ready**. It is unnecessary for today's GitHub demonstration. No PR is merged.
+For the colleague demo, use [this separate waiting run](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40881134460).
+It is armed until **17:00 UK/UTC on 29 October 2026** and finishes after the first
+matching batch. The exact problem marker for this run is:
 
-Before a real demo send, the operator must arrange receipt registration and
-test exclusion. Schedules currently remain off. Record every returned payload
-hash in the test-object manifest before any research import; the existing code
-does not automatically exclude arbitrary future records just because their text
-says “demo”. Keep a separate, clearly labelled synthetic report for the showcase.
-Never disable test exclusion in the real research report to make a demo count rise.
-If an operator is unavailable to perform this handling, stop at the approved preview and use the earlier
-receipt-matched fixtures to explain the receiving/reporting components.
+`SYNTHETIC-DEMO-d653ecd34c032c939fd2e8c8:`
+
+Keep that marker at the beginning of every submitted gap's primary description
+(task, approach, sought or question). Use a separate demo store and only preview
+synthetic observations. The marker was registered before collection and is
+permanently excluded from research reporting, including late submissions.
+Generic words such as “demo” do not qualify other records for this report.
+
+After the researcher approves the exact preview, the client sends normally.
+The GitHub job checks Cloudflare every 15 seconds; refresh its summary page after
+the receipt arrives. Its JSON/Markdown artifact is available to repository
+members for seven days. This updates a GitHub run/artifact, not a committed raw
+record or a Vercel page. The job has no GitHub write, R2 write or delete permission.
+It reads the named dates with fixed limits, never outputs unrelated records, and
+refuses mixed demo/research batches. The production import remains unmerged and
+disabled. Nothing is merged as part of this demonstration.
+
+See [the colleague quick-start](demo-start-here.md) for the install steps and
+copyable prompts. The runtime version is 0.3.0; the receiver supports the new
+optional fields. Claude's uploaded plugin shows 0.3.0, but the known larger
+cloud-notebook transfer problem remains. Do not demonstrate a successful cloud
+save or fresh-chat restoration unless the host actually verifies it.
 
 ## Reporting structure for the first rollout
 
@@ -113,8 +124,9 @@ from Bugbear's existing hackathon scientist/demand counts.
 
 Useful optional problem context includes the public tool/dataset name, relevant
 version, generic task, frequency, practical impact, workaround and desired
-improvement. Most can already be described in permitted fields. Dedicated new
-fields require coordinated schema changes, not extra keys in a current payload.
+improvement. These now have dedicated optional fields in 0.3.0. Their missing values do not
+block recording or sharing; the assistant may ask one useful follow-up at a
+natural pause. The actual version used is recorded, not a guessed latest release.
 Do not collect unpublished findings, detailed protocols or sample identifiers
 to fill the Bugbear page. Its tool mapping and hardware alternatives can be
 curated after collection.

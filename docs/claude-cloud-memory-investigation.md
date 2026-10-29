@@ -1,5 +1,10 @@
 # Benchside: investigate reliable Claude cloud memory
 
+Update, 29 October: the latest review package is now 0.3.0. It adds optional
+workflow context and a native v3 compatibility gate; it does not solve the
+transport failure below. Use the latest PR #5 source when prototyping. The
+observations below were made with 0.2.0 and remain useful reproduction evidence.
+
 ## Task
 
 Investigate and test the smallest dependable way for the installed Benchside
