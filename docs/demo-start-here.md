@@ -24,6 +24,12 @@ an installation method supported by every browser chat.
 
 ## Before presenting
 
+For today's most dependable live walkthrough, use **Codex with a new local demo
+folder outside Git**. Benchside 0.3.0 is already available in Will's Codex account;
+invoke Benchside in a fresh conversation and use the prompts below. Codex handles
+the runtime commands; the presenter does not need to type terminal commands.
+Normal host permissions still apply when writing the chosen folder or sending.
+
 Use only invented research and a separate demo store. Claude's larger cloud
 notebooks still have an unresolved exact-transfer problem. Prefer a durable
 local folder in a desktop agent if available, or Will's small ChatGPT notebook
@@ -35,6 +41,13 @@ an approved send. If network access is disabled, leave the preview pending;
 never claim that it reached Cloudflare or weaken host settings automatically.
 This is separate from installing the plugin. No storage/admin credentials go
 into a colleague's plugin.
+
+Status checked at 13:44 UK time, 29 October: the Claude 0.3.0 runtime works, but
+its network setting remains off and its live sending check is blocked. Its
+larger cloud-memory transfer is unresolved. Do not present the full Claude
+browser experience as verified. The standalone local client → receiver → GitHub
+route has passed a synthetic rehearsal; a fresh installed-app walkthrough is
+still a live demonstration, not a guarantee every host has the same permissions.
 
 Open the waiting GitHub run in the presenter's account:
 https://github.com/LauraRyanSW/tools-science-works/actions/runs/40881134460
