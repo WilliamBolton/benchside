@@ -85,10 +85,17 @@ assuming them.
     `"with":{"from":{"kind":"blob","id":"blob/<id>"},"as":"markdown"}`. Check
     `verdict:allow`, read back as above and run `native.confirm`.
   - A stale guard returns `guard_mismatch` or `block_gone` and changes nothing:
-    reread and reconcile rather than removing the guard. If a readback fails
-    `native.confirm`, guard-replace the block from the last confirmed candidate's
-    blob (blobs are immutable). Each save attaches its export and upload files to
-    the doc; this is expected. Never write through an unguarded artifact update.
+    reread and reconcile rather than removing the guard. A failed `native.confirm`
+    is not proof of corruption: another conversation may have saved a valid newer
+    notebook after this save. Preserve the candidate and readback files, reread,
+    and validate the current notebook. Keep valid newer state and reconcile the
+    original operation; never replace it with an older candidate's blob, even
+    with a fresh guard. Recover from a known-good blob only for verified corruption
+    attributable to this write, when its returned revision still matches the
+    current document and both current guards are available. Otherwise stop and
+    preserve the versions for explicit recovery. Each save attaches its export
+    and upload files to the doc; this is expected. Never write through an
+    unguarded artifact update.
   - Without these file tools the only route is retyping the payload inline. That
     is experimental: explain it before offering Claude Docs, and stop rather than
     retry after a checksum failure.

@@ -79,8 +79,10 @@ automatically. Older submissions and gaps without context keep their format.
   `approved_sha256`. Do not replace the payload, infer approval, or send subsequent
   batches that were not reviewed. A rejected or uncertain submission stays pending.
   Retry the same draft after a network failure; do not regenerate it to retry.
-- If `sharing.send` says a network proxy blocked the connection, nothing was sent
-  and the draft stays pending. In Claude chat (web, desktop) this means code
+- If `sharing.send` specifically says a proxy blocked the HTTPS tunnel, nothing
+  was sent and the draft stays pending. An ordinary HTTP 403 response proves only
+  that no valid receipt was received, not that the destination saw no data.
+  In Claude chat (web, desktop), a tunnel refusal usually means code
   network access is off. The researcher can open Settings → Capabilities, switch on
   Allow network egress, keep "Package managers only", and add
   `ingest.benchside.science.works` under Additional allowed domains (verified on

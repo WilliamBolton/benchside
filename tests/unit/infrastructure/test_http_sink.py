@@ -115,7 +115,7 @@ def test_egress_denial_keeps_code_and_explains_network_setting(denying_proxy):
     assert "Nothing was sent" in message and "still pending" in message
 
 
-def test_proxy_403_response_explains_network_setting():
+def test_http_403_does_not_claim_the_server_never_received_the_submission():
     class Refused:
         def open(self, *args, **kwargs):
             raise HTTPError("https://collector.example", 403, "Forbidden", {}, None)
@@ -123,7 +123,11 @@ def test_proxy_403_response_explains_network_setting():
     with pytest.raises(BenchsideError) as raised:
         HttpExportSink("https://collector.example/v1/gaps", opener=Refused()).send(PAYLOAD)
     assert raised.value.code == "submission_rejected"
-    assert "network settings" in str(raised.value) and "still pending" in str(raised.value)
+    message = str(raised.value)
+    assert "network settings" in message and "still pending" in message
+    assert "before it reached" not in message
+    assert "Nothing was sent" not in message
+    assert "receipt" in message
 
 
 def test_unreachable_collector_keeps_existing_guidance():

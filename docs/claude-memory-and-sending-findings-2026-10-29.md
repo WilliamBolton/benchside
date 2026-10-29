@@ -1,7 +1,9 @@
 # Claude memory and sending: what was tested, 29 October 2026
 
 All tests used fake (synthetic) notebooks and new test docs. The ACCEPT-20261028-A
-notebook was not touched. No reports were sent. No settings were changed.
+notebook was not touched. The memory tests did not send reports or change network
+settings. The later explicitly approved sending tests and domain setting are
+recorded below.
 
 ## 1. Saving the notebook to a Claude Doc
 
@@ -40,10 +42,15 @@ guide. If it ever stops working, the save is refused and nothing is lost.
 - Turning it on (Max plan) reveals a domain allowlist. With "Package managers
   only" plus `ingest.benchside.science.works` under Additional allowed domains,
   a new claude.ai chat reached Science Works: GET 200, then an approved synthetic
-  feedback report was accepted (receipt 17:03:29 UTC, fingerprint `f2953dbf…`
+  feedback report was accepted (receipt 17:03:29 UTC, fingerprint
+  `f2953dbfc7024a741767d7242228e81f73a155077babf03070eb36e5fd56c3f6`
   matching the approved one). It used the feedback channel, not the demo marker.
   The setting was left on with only that domain added.
-- Claude Code can reach Science Works directly (read-only check: 200 OK).
+- Claude Code can reach Science Works directly (read-only check: 200 OK). Its
+  later approved synthetic feedback send was stored at 17:10:52 UTC with digest
+  `5dbe6eb0ad008739eb5061337222863b9f587fe7a24c53187655df9b6edf1577`.
+  Both feedback object keys were independently observed in R2 and registered as
+  synthetic exclusions in the reporting PR; neither consumes the demo marker.
 - When the network is blocked, Benchside already kept the report unsent and
   pending. Its message said "retry", which does not help.
 
@@ -76,3 +83,16 @@ Tests: 5 new; the full suite passes (481). The committed plugin copy
   app restarts. claude.ai already has 0.3.0.
 - Notebooks larger than ~48 KB in Claude Docs need local storage or archiving.
 - Four synthetic test docs can be deleted.
+
+## Follow-up review corrections
+
+- A valid later notebook also fails `native.confirm` against an earlier candidate.
+  The recovery instructions now preserve newer valid state and reconcile the
+  operation instead of rolling it back. Blob recovery requires verified corruption
+  attributable to this write, the same returned revision, and both current guards.
+  Synthetic reproduction: the current notebook contained two decisions; restoring
+  the earlier candidate would have discarded the second one.
+- A normal HTTP 403 can follow a POST received by the destination. The message now
+  says no valid receipt was received and keeps the draft pending. Only a refused
+  HTTPS CONNECT tunnel is described as nothing sent. The error codes are unchanged;
+  the HTTP 403 regression assertion failed before the wording fix.

@@ -97,12 +97,18 @@ class HttpExportSink:
                 if err.code == 429
                 else ("submission_unavailable" if err.code >= 500 else "submission_rejected")
             )
-            # The collector never answers 403; a host proxy or network policy does.
-            message = (
-                self._network_denied("Nothing was marked as shared", "refused (HTTP 403) access to")
-                if err.code == 403
-                else f"Collector returned HTTP {err.code}; nothing was marked as shared. Retry the same reviewed submission."
-            )
+            # An HTTP response can arrive after the destination received the POST.
+            # Only a refused CONNECT tunnel below proves the payload was not sent.
+            message = f"Collector returned HTTP {err.code}; nothing was marked as shared. Retry the same reviewed submission."
+            if err.code == 403:
+                host = urlsplit(self.destination).hostname
+                message = (
+                    "HTTP 403: no valid collector receipt was received; nothing was marked "
+                    "as shared. The reviewed submission is still pending. A proxy or server "
+                    f"policy may be refusing access to {host}. Check the app or network "
+                    "settings before retrying the same reviewed submission. Do not change "
+                    "settings for the researcher."
+                )
             raise InfrastructureError(message, code=code) from err
         except (URLError, TimeoutError, OSError) as err:
             # Host egress proxies refuse the HTTPS tunnel before any payload is sent.
