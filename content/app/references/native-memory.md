@@ -48,38 +48,59 @@ to a text-only tool cannot. A successful small-notebook test does not establish
 that a larger notebook will transfer reliably.
 
 The Claude 0.2.0 test on 29 October failed to restore an existing notebook after
-the model corrupted a long inline payload while copying it. Its current Docs
-read/export tools exposed no exact file bridge in that session. The runtime
-rejected the copy and the source document was not changed. Treat that account's
-inline-copy route as experimental, not verified durable storage. Earlier small
-notebook successes do not supersede this result. Check capabilities again in
-other hosts/accounts rather than assuming the same limitation everywhere.
+the model corrupted a long inline payload while copying it. The runtime rejected
+the copy and the source document was not changed. The Claude Docs file route
+below avoids retyping and passed synthetic tests the same day. Copying a payload
+inline remains experimental. Check capabilities in each host/account rather than
+assuming them.
 
 - **ChatGPT Pages:** read the notebook's complete state block with `read_page`.
   Retain its block ID/hash and any returned stream kind. Replace only that block
   with `edit_page` / `replace_block_markdown`, passing `expected_hash` from the
   read. Omit `base_sequence` if the read did not return `through_sequence`.
   Use ordinary Markdown, not Agent Instructions. Inspect every operation receipt.
-- **Claude Docs:** native create, complete readback, guarded update and fresh-chat
-  discovery were verified in one account on 23 October 2026. Inspect the actual
-  tool schemas and guide in the current account before using them. The tested
-  route uses `Artifact` listing with type `Docs` (or scope `mine`) for metadata
-  discovery, then `mcp__Claude_Docs__read` on the observed project and its content
-  node. `query` lists comments; it is not document discovery. Match the selected
-  notebook's stable ID; a title only identifies candidates.
-  Keep the snapshot in a dedicated code block. A prose-engine read supplies the
-  block ID, hash and document revision. `mcp__Claude_Docs__update` uses a `replace`
-  operation targeting that block with both `ifHash` and `ifRev`, replacing it
-  with the exact candidate Markdown. Use the full session-prefixed block ID
-  from the read, not its abbreviated `.number` display. The update targets the
-  observed content-node `ref` within its project `container`. Check the operation
-  receipt (`verdict:allow`), read back and run `native.confirm`. A deliberate
-  stale write returned `guard_mismatch` in the live test; reread and reconcile
-  rather than removing the guard. Do not write the notebook through an unguarded
-  artifact update or infer current revision from a possibly delayed listing time.
+- **Claude Docs:** create, readback, guarded update and fresh-chat discovery were
+  verified on 23 October 2026; exact file transfer on 29 October. Inspect the
+  actual tool schemas and guide in the current account before using them.
+  - Discovery: `Artifact` listing with type `Docs` (or scope `mine`) shows titles
+    and short links, not IDs. `mcp__Claude_Docs__read` on a link returns its stable
+    ID as `frame.slug`; match it to the saved notebook ID. A title only identifies
+    candidates. `query` lists comments; it is not discovery.
+  - Size: keep the snapshot in one dedicated code block. A Claude Docs block holds
+    at most 65,536 characters, so pass `"document_limit_bytes":65536` with every
+    `native.inspect`, `native.run` and `native.batch` request. At capacity, keep the
+    notebook and offer archival or local storage; never split the block.
+  - Read: an outline read of the content node (`payload {"projection":"outline"}`)
+    gives `rev` and the block's full session-prefixed ID and `h` without the
+    payload. Then `mcp__Claude_Docs__create` with `object:"blob"`, `engine:"blob"`,
+    `payload {"from":{"object":"file","id":"<tab id>"},"format":"markdown"}`. Its
+    `rev` must equal the outline `rev`; otherwise repeat both. `Artifact` `read`
+    with the doc link as `url` and the returned asset ID as `path` saves the export
+    as a file. Pass that file's text as `document`.
+  - Write: save `result.markdown` from the `--response-file` response to a new
+    file. Upload it with `Artifact` publish (`url` = doc link, `asset:true`,
+    `file_path`) and check the reported sha256 matches the file. `create` a blob
+    with `payload {"asset":"<asset id>"}`, then `mcp__Claude_Docs__update` with a
+    `replace` of the state block carrying `ifHash`, `ifRev` and
+    `"with":{"from":{"kind":"blob","id":"blob/<id>"},"as":"markdown"}`. Check
+    `verdict:allow`, read back as above and run `native.confirm`.
+  - A stale guard returns `guard_mismatch` or `block_gone` and changes nothing:
+    reread and reconcile rather than removing the guard. A failed `native.confirm`
+    is not proof of corruption: another conversation may have saved a valid newer
+    notebook after this save. Preserve the candidate and readback files, reread,
+    and validate the current notebook. Keep valid newer state and reconcile the
+    original operation; never replace it with an older candidate's blob, even
+    with a fresh guard. Recover from a known-good blob only for verified corruption
+    attributable to this write, when its returned revision still matches the
+    current document and both current guards are available. Otherwise stop and
+    preserve the versions for explicit recovery. Each save attaches its export
+    and upload files to the doc; this is expected. Never write through an
+    unguarded artifact update.
+  - Without these file tools the only route is retyping the payload inline. That
+    is experimental: explain it before offering Claude Docs, and stop rather than
+    retry after a checksum failure.
   The installed review plugin also passed methods-role recording, fresh-chat
   discovery/resumption and project isolation in this account on 23 October.
-  Other hosts/accounts and scientific role quality need their own acceptance tests.
   If another account lacks these operations, explain the missing capability
   rather than using an ephemeral execution folder or silently overwriting a Doc.
 
