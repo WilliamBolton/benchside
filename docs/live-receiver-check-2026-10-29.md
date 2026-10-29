@@ -30,9 +30,63 @@ no research study is currently offered.
   Twelve registered synthetic payloads are now excluded. No stored object was deleted.
 
 Successful verified receipts establish that the receiver accepted and acknowledged
-storage of the exact submitted bytes. Independent R2 readback through the new
-reporting connection remains pending the read-only credential approval; it is not
-claimed as completed by these HTTP tests.
+storage of the exact submitted bytes. The subsequent reporting check below also
+verified those bytes independently in R2.
+
+## Reporting connection and independent readback
+
+With the user's approval, created `benchside-github-reporting-readonly` with Object
+Read permissions scoped to the five Benchside EU buckets. Saved its credentials
+as encrypted `BENCHSIDE_R2_ACCESS_KEY_ID` and `BENCHSIDE_R2_SECRET_ACCESS_KEY`
+Actions secrets in the private `LauraRyanSW/tools-science-works` repository.
+Credentials were not printed, committed, or written to local files. They do not
+belong in the client package or Vercel browser code.
+
+The reporting importer ran locally against live R2 with this credential:
+
+- Listed 12 objects; excluded all 12 registered synthetic objects; accepted zero
+  research objects. The resulting research summary therefore contains no demo data.
+- Independently read all 12 known objects and verified their receipt hashes and
+  sizes. The newest five also matched the exact sent JSON bytes.
+- Ran aggregation separately on the receipt-matched synthetic fixtures: two gap
+  observations, two feedback submissions, four survey submissions and two activity
+  batches were handled successfully. This fixture output was not published.
+- No object was written or deleted; no schedule was enabled or report published.
+
+Evidence: `/private/tmp/benchside-reporting-live-20261029/result.json` and
+`synthetic-analysis-check.json`. This establishes the live importer/credential
+connection, not a completed GitHub-hosted workflow run. That workflow deliberately
+requires reviewed default-branch code and remains unmerged.
+
+## Installed app checks and cloud-memory limitation
+
+Claude's installed plugin and bundled runtime both reported 0.2.0. However,
+[the upgrade test](https://claude.ai/chat/2d14f553-0f5e-4856-b678-b1b31154e6b0)
+failed to restore the existing synthetic notebook. Its tool returned the state
+inline; the model corrupted the long payload while copying it into execution.
+`native.inspect` rejected the checksum. No new decision was saved, and the source
+notebook remained at Docs revision 14. The unvalidated envelope reported snapshot
+revision 8; this is not a successful restore.
+
+A follow-up capability check found no exact document-to-file or file-to-document
+bridge in that Claude session. Source guidance now requires an exact-transfer
+capability for dependable native storage, labels inline-copy experiments honestly,
+and stops automatic manual-copy retries without replacing the saved notebook.
+This instruction improvement is not a working cloud-storage adapter, and has not
+yet been repackaged into the installed plugin.
+After the guidance changes, 100 existing native-storage, onboarding and role
+instruction tests passed; the diff whitespace check also passed. These unit tests
+do not establish a working host-to-runtime data bridge.
+
+A separate [ChatGPT synthetic rehearsal](https://chatgpt.com/c/6ae32b8c-80d8-83ed-9c6b-893392d082db)
+reported a successful native revision-1 save/readback in an owner-only Space, with
+one decision and one open question. All sharing remained off; nothing was sent.
+Fresh-chat restoration of this new rehearsal was not tested. A small success does
+not resolve the larger Claude transfer failure.
+
+Vercel's Science Works team lists the user's account as **Developer**. The production
+Bugbear project and the reporting branch preview are visible. Some management
+settings require higher permissions; no deployment or settings were changed.
 
 ## Deployment evidence
 
@@ -50,15 +104,17 @@ the final deployment removes only the synthetic catalog.
 
 ## Remaining before wider use
 
-1. Complete the Claude 0.2.0 upload and installed-app upgrade check. The upload
-   page is open for the user; it still shows no selected file.
-2. Approve a dedicated read-only key for the five Benchside buckets, save it as
-   encrypted Actions secrets in the private reporting repository, and test the
-   live import/readback. No new key was created in this pass.
+1. Resolve Claude's exact-data-transfer limitation before describing its cloud
+   notebook route as dependable. Keep existing notebooks intact. A real connector
+   bridge or an explicitly chosen durable local store avoids model transcription;
+   splitting state into separately saved blocks would require a new atomic protocol.
+2. Complete the hosted reporting run and the future Vercel report view after the
+   relevant review/merge decisions. Do not relax the default-branch credential
+   guard merely to demonstrate the pipeline from an unmerged branch.
 3. Review and approve the outstanding PRs before merging/releasing. Reporting
    automation remains disabled, and the Vercel display is still future work.
 
-An internal demonstration can use synthetic projects with sharing off. Claude
-native notebook saving has previously taken about twelve minutes; this pass did
-not establish an improvement. The OpenAI package remains private, not a public
-Science Works directory listing.
+Use the [interactive demo runbook](live-demo.md) for a fresh user-led demonstration.
+The current evidence covers individual components, not a live end-to-end Vercel
+display. The OpenAI package remains private, not a public Science Works directory
+listing. No PR has been merged.

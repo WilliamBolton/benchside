@@ -62,13 +62,17 @@ on a new host, not permission to copy or relocate research records.
   already contains one. Never silently switch an established project.
 - **App-native storage:** use a private Benchside Space/collection and notebook
   through [native memory](native-memory.md). Offer this only with complete reads,
-  conditional writes and readback. ChatGPT Pages and Claude Docs are examples;
+  conditional writes, readback and an exact data-transfer route to/from the
+  execution environment. Inline tool text that the model must retype is an
+  experimental route, even if a small test passes; explain that limitation
+  before selection. ChatGPT Pages and Claude Docs are examples;
   account capabilities decide availability. A Library upload alone is insufficient.
 - **Connected storage:** ask which actual service/location. Google Drive and
   Google Cloud Storage are different services. Inspect the installed connector
   and offer a private document/object only if it supports the same native-memory
   protocol. Require a revision/hash/generation precondition on updates, complete
-  reads, discoverable stable IDs and readback. Do not invent a Google API or ask
+  reads, discoverable stable IDs, readback and exact transfer to/from execution.
+  Do not invent a Google API or ask
   for an API key when the installed connector can provide access. If the connector
   is read-only or has only blind overwrites, explain the missing capability and
   offer a working local/native option. No Google connector is bundled here.

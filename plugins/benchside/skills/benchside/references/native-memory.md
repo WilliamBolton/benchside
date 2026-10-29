@@ -39,6 +39,22 @@ discover, create, read and edit documents. Tools must support complete reads and
 conditional replacement using the revision/hash returned by the preceding read.
 Always inspect the actual tools available in this account; never invent APIs.
 
+Complete reads and guarded writes are necessary but not sufficient: check how
+their contents move between the document tool and the execution environment.
+For dependable storage, both directions must transfer exact data without the
+model retyping an encoded payload. A returned file, or host-supported
+programmatic tool composition, can provide this bridge; a literal path passed
+to a text-only tool cannot. A successful small-notebook test does not establish
+that a larger notebook will transfer reliably.
+
+The Claude 0.2.0 test on 29 October failed to restore an existing notebook after
+the model corrupted a long inline payload while copying it. Its current Docs
+read/export tools exposed no exact file bridge in that session. The runtime
+rejected the copy and the source document was not changed. Treat that account's
+inline-copy route as experimental, not verified durable storage. Earlier small
+notebook successes do not supersede this result. Check capabilities again in
+other hosts/accounts rather than assuming the same limitation everywhere.
+
 - **ChatGPT Pages:** read the notebook's complete state block with `read_page`.
   Retain its block ID/hash and any returned stream kind. Replace only that block
   with `edit_page` / `replace_block_markdown`, passing `expected_hash` from the
@@ -169,10 +185,22 @@ the response file. Keep that file until readback confirms the save.
 
 This option does not add document access. Inspect the actual host tools: a path
 string is not document content, and a tool that only accepts literal text does not
-automatically read files. Where exact file transfer is unavailable, use the exact
-returned Markdown with the existing guard and complete readback; do not claim the
-copying limitation is solved. A checksum mismatch still requires recovery before
-continuing. Never relax a write guard or the confirmation check to speed up saving.
+automatically read files. If no exact transfer route is available, explain this
+before offering the store as dependable or attempting a long manual copy. Keep
+the existing notebook in place and offer a verified storage option; do not move
+research data or create an empty replacement without the researcher's choice.
+An explicitly requested synthetic experiment can still test the limited route,
+but report its size and scope, not general reliability.
+
+On a checksum failure, distinguish a bad transfer from a damaged saved document.
+Keep the source untouched; do not restore an older version merely because a
+model-produced copy failed. Reread through an exact bridge if one is available.
+Otherwise stop automatic copying retries and explain that recording is paused.
+Do not reconstruct the snapshot from the readable journal, fill in missing
+characters, or split it into independently saved blocks: the current protocol
+requires one atomic state block. Scientific discussion can continue, with any
+new unsaved decisions explicitly identified as unsaved. Never relax a write guard
+or the confirmation check to speed up saving.
 
 ### Group private work from the same turn
 

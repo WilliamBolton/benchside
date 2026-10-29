@@ -37,6 +37,10 @@ to avoid a separate cloud save for every setup or recording step. Keep submissio
 previews and sends separate. Confirm one notebook save before refreshing its journal.
 Use the launcher's `--response-file` option when the host can pass file contents
 directly to its document tools; do not retype encoded state. Save a returned
+`changed:true` candidate only through a supported exact-transfer route for normal
+use; inline-copy storage is experimental and must be explained before selection.
+If transfer fails, preserve the saved notebook and identify new work as unsaved.
+When a supported save route is available, save a returned
 `changed:true` candidate even when the inner action failed, then explain the
 failure. A failed action and a failed save are different outcomes.
 A disposable execution folder or uploaded source is not a durable journal.
