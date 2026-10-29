@@ -13,8 +13,10 @@ The client emits benchside.gaps.v3 only when context is present. Legacy v1/v2
 payloads retain their format. The receiver independently allowlists every context
 field, applies the same 2000 UTF-16 character limit and stores the exact bytes.
 Reporting preserves context in its private analysis bundle; public reports still
-contain aggregate counts only. Exact grouping includes context, so different
-versions/workarounds remain different descriptions until later thematic analysis.
+contain aggregate counts only. The updated reporting PR preserves each complete
+observation separately, including its wording, context and evidence basis. It
+deduplicates retries, but does not merge independent matching descriptions.
+Thematic grouping through an LLM remains a later analysis step.
 
 Native notebooks containing these new records or pending drafts use
 benchside.native.v3. Older clients refuse these notebooks and request an update,

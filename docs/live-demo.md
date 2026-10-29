@@ -116,9 +116,10 @@ PR. Vercel does not require data in GitHub: if frequent updates later justify it
 store approved report snapshots in Cloudflare and fetch those through a Vercel
 server route. Retain an explicit review/publish step in either design.
 
-Current analysis groups identical structured gap text; it does not perform LLM
-theme discovery or map problems into Bugbear tool tiles. Those are later analysis
-and display tasks. A problem report is not automatically a vote to rebuild a
+The updated reporting PR retains each complete gap observation alongside summary
+statistics. It deduplicates retries without combining matching descriptions.
+LLM theme discovery and mapping into Bugbear tool tiles are later analysis and
+display tasks. A problem report is not automatically a vote to rebuild a
 tool. Keep source-specific report counts and participating-store counts distinct
 from Bugbear's existing hackathon scientist/demand counts.
 

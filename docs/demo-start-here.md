@@ -94,9 +94,13 @@ Only this invented problem should go into the demo submission.
 
 Research discussion → private records → reviewed workflow problem → receiving
 API → private Cloudflare bucket → automatic GitHub summary and downloadable report.
-The Vercel view is later work. Counts and identical structured descriptions are
-computed in code. Related paraphrases are not yet clustered by an LLM. Optional
-context is retained privately; public-ready reporting remains aggregate only.
+The Vercel view is later work. The updated reporting PR computes summary counts
+and retains each complete submitted problem separately, without summarising its
+wording or combining matching descriptions. Related problems are not yet grouped
+by an LLM. Optional context is retained privately; public-ready reporting remains
+aggregate only. The already-running demo was started on the previous revision,
+which displays exact-description groups; a fresh run after review uses individual
+records. Both retain the full wording and context of the single demo problem.
 
 [Successful automatic rehearsal](https://github.com/LauraRyanSW/tools-science-works/actions/runs/40877962796)
 provides a fallback example, clearly labelled as an earlier synthetic test.
